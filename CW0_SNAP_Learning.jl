@@ -1,4 +1,8 @@
-# Learning example #############################################################
+# SNAP learning/fitting example
+#
+# It shows a first integration of the following packages under development:
+# AtomsBase.jl, ElectronicStructure.jl, InteratomicPotentials.jl, and PotentialLearning.jl
+#
 
 import Pkg
 Pkg.add("Unitful")
@@ -16,21 +20,21 @@ using ElectronicStructure
 using InteratomicPotentials
 using PotentialLearning
 
-
 """
     gen_test_atomic_conf(D)
 
 Generate test atomic configurations
 """
-function gen_test_atomic_conf(D, L)
+function gen_test_atomic_conf(D)
     # Domain
-    box = [[10.0, 0.0, 0.0], [0.0, 10.0, 0.0], [0.0, 0.0, 10.0]] * L
+    box = [[10.0, 0.0, 0.0], [0.0, 10.0, 0.0], [0.0, 0.0, 10.0]] * 1.0u"cm"
     # Boundary conditions
     bcs = [Periodic(), Periodic(), DirichletZero()]
     # No. of atoms per configuration
     N = 30
     # No. of configurations
-    M = 20 
+    M = 20
+    # Element
     c = elements[:C]
     # Define atomic configurations
     atomic_confs = []
@@ -46,27 +50,26 @@ function gen_test_atomic_conf(D, L)
     return atomic_confs
 end
 
-# Define parametric types
-D = 3; L = 1.0u"cm"; E = 1.0u"J"
+# Define parametric types 
+D = 3, T = Float64 # TODO: discuss which parametric types are necessary, define a common policy for all packages 
 
-# Generate atomic configurations: domain and particles (position, velocity, etc)
-atomic_confs = gen_test_atomic_conf(D, L)
+# Generate test atomic configurations: domain and particles (position, velocity, etc)
+atomic_confs = gen_test_atomic_conf(D)
 
-# Generate learning data
+# Generate learning data using Lennard Jones and the atomic configurations
 lj = LennardJones(1.657e-21u"J", 0.34u"nm")
 data = gen_test_data(D, atomic_confs, lj)
 
-# Define potential
+# Define target potential: SNAP
 rcutfac = 0.1; twojmax = 2
-# TODO: line below is not necessary after full integration with InteratomicPotentials.jl
-inter_pot_atomic_confs = inter_pot_conf(atomic_confs)
-snap = SNAP(rcutfac, twojmax, inter_pot_atomic_confs[1])
+inter_pot_atomic_confs = inter_pot_conf(atomic_confs) # TODO: remove after full integration with InteratomicPotentials.jl
+snap = SNAP(rcutfac, twojmax, inter_pot_atomic_confs[1]) #TODO: improve interface, do not send a conf as argument
 
 # Define learning problem
 lp = SmallSNAPLP(snap, inter_pot_atomic_confs, data)
 
 # Learn :-)
-learn(lp, LeastSquaresOpt{D, Float64}())
+learn(lp, LeastSquaresOpt{D, T}())
 
 
 
