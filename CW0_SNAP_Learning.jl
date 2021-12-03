@@ -4,15 +4,15 @@
 # AtomsBase.jl, ElectronicStructure.jl, InteratomicPotentials.jl, and PotentialLearning.jl
 #
 
-import Pkg
-Pkg.add("Unitful")
-Pkg.add("PeriodicTable")
-Pkg.add("StaticArrays")
-Pkg.add("LinearAlgebra")
-Pkg.add("AtomsBase")
-Pkg.add(url="git@github.com:cesmix-mit/ElectronicStructure.jl.git")
-Pkg.add(url="https://github.com/cesmix-mit/InteratomicPotentials.jl.git", rev="integrated-branch")
-Pkg.add(url="https://github.com/cesmix-mit/PotentialLearning.jl.git", rev="refactor")
+#import Pkg
+#Pkg.add("Unitful")
+#Pkg.add("PeriodicTable")
+#Pkg.add("StaticArrays")
+#Pkg.add("LinearAlgebra")
+#Pkg.add("AtomsBase")
+#Pkg.add(url="git@github.com:cesmix-mit/ElectronicStructure.jl.git")
+#Pkg.add(url="https://github.com/cesmix-mit/InteratomicPotentials.jl.git", rev="integrated-branch")
+#Pkg.add(url="https://github.com/cesmix-mit/PotentialLearning.jl.git", rev="refactor")
 
 using Unitful, PeriodicTable, StaticArrays, LinearAlgebra
 using AtomsBase
@@ -41,7 +41,7 @@ function gen_test_atomic_conf(D)
     for j in 1:M
         atoms = []
         for i in 1:N
-            pos = SVector{D}(rand(D)*L...)
+            pos = SVector{D}(rand(D)*1.0u"cm"...)
             atom = StaticAtom(pos,c)
             push!(atoms, atom)
         end
@@ -51,7 +51,7 @@ function gen_test_atomic_conf(D)
 end
 
 # Define parametric types 
-D = 3, T = Float64 # TODO: discuss which parametric types are necessary, define a common policy for all packages 
+D = 3; T = Float64 # TODO: discuss which parametric types are necessary, define a common policy for all packages 
 
 # Generate test atomic configurations: domain and particles (position, velocity, etc)
 atomic_confs = gen_test_atomic_conf(D)
@@ -71,5 +71,8 @@ lp = SmallSNAPLP(snap, inter_pot_atomic_confs, data)
 # Learn :-)
 learn(lp, LeastSquaresOpt{D, T}())
 
+learn(lp, QRLinearOpt{D, T}())
+
+learn(lp, β_loss, NelderMeadOpt{D, T}(100))
 
 
