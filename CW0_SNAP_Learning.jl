@@ -66,13 +66,11 @@ inter_pot_atomic_confs = inter_pot_conf(atomic_confs) # TODO: remove after full 
 snap = SNAP(rcutfac, twojmax, inter_pot_atomic_confs[1]) #TODO: improve interface, do not send a conf as argument
 
 # Define learning problem
-lp = SmallSNAPLP(snap, inter_pot_atomic_confs, data)
+lp = SmallSNAPLP(snap, inter_pot_atomic_confs, data, trainingsize = 0.8, fit = [:e])
 
 # Learn :-)
 learn(lp, LeastSquaresOpt{D, T}())
-
-learn(lp, QRLinearOpt{D, T}())
-
-learn(lp, β_loss, NelderMeadOpt{D, T}(100))
+#learn(lp, QRLinearOpt{D, T}())
+#learn(lp, β_loss, NelderMeadOpt{D, T}(100))
 
 
