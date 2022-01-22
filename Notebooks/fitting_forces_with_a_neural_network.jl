@@ -28,6 +28,7 @@ using InteratomicPotentials
 using Flux
 using Flux.Data: DataLoader
 using CUDA
+using Plots
 using PlutoUI
 end
 
@@ -75,35 +76,39 @@ md"The following function generates a vector of atomic configurations. Each atom
 # ╔═╡ 3e606585-86b6-4389-818d-bcbdb6078608
 function gen_atomic_confs()
     # Domain
-    L = 5u"Å"; σ0 = 2.0u"Å"
+    L = 10u"Å"
     box = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]] * L
     # Boundary conditions
     bcs = [DirichletZero(), DirichletZero(), DirichletZero()]
     # No. of atoms per configuration
     N = 2
     # No. of configurations
-    M = 10000
+    M = 5000
     # Element
     elem = elements[:Ar]
     # Define atomic configurations
     atomic_confs = []
-    for j in 1:M
-        #σ0 = ((2.0 - 0.1) / (M - 1) * (j - 1) + 0.1)u"Å"
+	dists = collect(1.15:0.001:2.1)u"Å"
+	for j in 1:M
+		d = dists[rand(1:length(dists))]
         atoms = []
-        ϕ = rand() * 2.0 * π; θ = rand() * π
-        x = (L/2.0-σ0) * cos(ϕ) * sin(θ) + L/2.0
-        y = (L/2.0-σ0) * sin(ϕ) * sin(θ) + L/2.0
-        z = (L/2.0-σ0) * cos(θ) + L/2.0
-        pos1 = SVector{3}(x, y, z)
-        atom = StaticAtom(pos1, elem)
-        push!(atoms, atom)
-        ϕ = rand() * 2.0 * π; θ = rand() * π
-        x += σ0 * cos(ϕ) * sin(θ)
-        y += σ0 * sin(ϕ) * sin(θ)
-        z += σ0 * cos(θ)
-        pos2 = SVector{3}(x, y, z)
-        atom = StaticAtom(pos2, elem)
-        push!(atoms, atom)
+        x1 = rand(0.1:0.1:L.val)u"Å"
+        y1 = rand(0.1:0.1:L.val)u"Å"
+        z1 = rand(0.1:0.1:L.val)u"Å"
+        pos1 = SVector{3}(x1, y1, z1)
+        atom1 = StaticAtom(pos1, elem)
+        push!(atoms, atom1)
+		x2 = L; y2 = L; z2 = L
+		while x1 + x2 > L     || y1 + y2 > L    || z1 + z2 > L    ||
+		      x1 + x2 < 0.0u"Å" || y1 + y2 < 0.0u"Å" || z1 + z2 < 0.0u"Å"
+        	ϕ = rand() * 2.0 * π; θ = rand() * π
+	        x2 = d * cos(ϕ) * sin(θ)
+	        y2 = d * sin(ϕ) * sin(θ)
+	        z2 = d * cos(θ)
+		end
+        pos2 = SVector{3}(x1+x2, y1+y2, z1+z2)
+        atom2 = StaticAtom(pos2, elem)
+        push!(atoms, atom2)
         push!(atomic_confs, FlexibleSystem(box, bcs, atoms))
     end
     return atomic_confs
@@ -263,7 +268,7 @@ md"The neural network model and the parameters to be optimized are defined using
 
 # ╔═╡ c8c43e19-daff-4272-8703-a2dcaceca7a9
 begin
-cpu_model = Chain(Dense(3,150,Flux.σ),Dense(150,3))
+cpu_model = Chain(Dense(3,200,Flux.relu),Dense(200,200,Flux.relu),Dense(200,3))
 cpu_ps = Flux.params(cpu_model) # model's trainable parameters
 end
 
@@ -271,14 +276,14 @@ end
 md"The optimizer [ADAM](https://en.wikipedia.org/wiki/Stochastic_gradient_descent#Adam) is defined using a learning rate η = 0.1."
 
 # ╔═╡ 49d7f00a-db88-4dab-9209-c9840255d999
-opt = ADAM(0.1)
+opt = ADAM(0.001)
 
 # ╔═╡ 4481fcae-6c0c-4455-9a11-0eb1f19805cc
 md"The model is trained in the loop below. At each iteration or epoch, the gradient of the loss function is calculated for each batch of the training set. Flux then uses this gradient and the optimizer to update the parameters."
 
 # ╔═╡ 2e199532-5177-4b39-9c7e-83d61c1e2f13
 begin
-epochs = 20
+epochs = 50
 with_terminal() do
 	for epoch in 1:epochs
 	    # Training of one epoch
@@ -302,6 +307,18 @@ md"The loss of the test data set is calculated using the root mean squared error
 # ╔═╡ 195925f3-19ea-47a2-bc31-561bf698f580
 @show "Test RMSE: $(global_loss(cpu_test_loader, cpu_model))"
 
+# ╔═╡ 97cd889b-7fd5-494a-8f34-5830e53557f6
+md"The following plot shows the norm of the forces computed by the neural network model and the surrogate model."
+
+# ╔═╡ 2dcc5427-b2e1-416f-8c46-957b39ac42d9
+begin
+	rs = 1.15:0.001:2.0
+	fs_model = [ norm(cpu_model([n, 0.0, 0.0])) for n in rs ]
+	fs_dft = [ norm(force([n, 0.0, 0.0], lj)) for n in rs ]
+	plot(rs, fs_model, label = "Neural network model force")
+	plot!(rs, fs_dft, label = "Lennard-Jones force")
+end
+
 # ╔═╡ 4d94701b-e3a5-4aef-ba23-97c1150f89a1
 md"## Defining and training the model in GPU"
 
@@ -320,7 +337,7 @@ md"Also, the model with its parameters is transferred to the GPU."
 
 # ╔═╡ 5a7e8a3f-3d8d-4048-80fe-c64e9c1cfd44
 begin
-gpu_model = Chain(Dense(3,150,Flux.σ),Dense(150,3)) |> device2
+gpu_model = Chain(Dense(3,200,Flux.relu),Dense(200,200,Flux.relu),Dense(200,3)) |> device2
 gpu_ps = Flux.params(gpu_model) # model's trainable parameters
 end
 
@@ -329,7 +346,7 @@ md"The model is trained in the loop below. In this case the elapsed time is meas
 
 # ╔═╡ c6e66ff5-b5f2-4c0f-9eae-f123034bd438
 begin
-epochs_ = 20
+epochs_ = 50
 with_terminal() do
 	for epoch in 1:epochs_
 	    # Training of one epoch
@@ -342,6 +359,16 @@ with_terminal() do
 	    println("Epoch: $(epoch), loss: $(global_loss(gpu_train_loader, gpu_model)), time: $(time)")
 	end
 end
+end
+
+# ╔═╡ c2360180-2b3e-41ad-b427-cf98a23deacd
+md"The following plot shows the norm of the forces computed by the neural network model and the surrogate model."
+
+# ╔═╡ bbc5ddbc-efd2-48b7-a0e8-3e288eeb4f1a
+begin
+	fs_model_gpu = [ norm(gpu_model(device2([n, 0.0, 0.0]))) for n in rs ]
+	plot(rs, fs_model_gpu, label = "Neural network model force")
+	plot!(rs, fs_dft, label = "Lennard-Jones force")
 end
 
 # ╔═╡ 24f677cf-ee87-4af0-9c11-5d0911f1c700
@@ -403,6 +430,8 @@ md"Again, the loss of the test data set is calculated using the root mean square
 # ╟─74d94c45-7a66-4779-9bd8-d6987d23bdc4
 # ╟─46a7f1ab-5f99-4b69-9bff-c299815cccab
 # ╠═195925f3-19ea-47a2-bc31-561bf698f580
+# ╟─97cd889b-7fd5-494a-8f34-5830e53557f6
+# ╠═2dcc5427-b2e1-416f-8c46-957b39ac42d9
 # ╟─4d94701b-e3a5-4aef-ba23-97c1150f89a1
 # ╟─c2492af2-23e7-45c5-bf44-109c59d7986d
 # ╠═d4526269-07e6-4684-8bed-7cee5898ef52
@@ -410,6 +439,8 @@ md"Again, the loss of the test data set is calculated using the root mean square
 # ╠═5a7e8a3f-3d8d-4048-80fe-c64e9c1cfd44
 # ╟─f89622bb-433a-4547-aec0-9fd3a2ffbaf2
 # ╠═c6e66ff5-b5f2-4c0f-9eae-f123034bd438
+# ╟─c2360180-2b3e-41ad-b427-cf98a23deacd
+# ╠═bbc5ddbc-efd2-48b7-a0e8-3e288eeb4f1a
 # ╟─24f677cf-ee87-4af0-9c11-5d0911f1c700
 # ╟─04ff7b49-1feb-4b19-9b57-3ddad117427d
 # ╠═d300f5ce-2cce-4739-9108-ef20ff889955
