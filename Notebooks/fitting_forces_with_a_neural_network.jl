@@ -83,7 +83,7 @@ function gen_atomic_confs()
     # No. of atoms per configuration
     N = 2
     # No. of configurations
-    M = 5000
+    M = 50000
     # Element
     elem = elements[:Ar]
     # Define atomic configurations
@@ -99,7 +99,7 @@ function gen_atomic_confs()
         atom1 = StaticAtom(pos1, elem)
         push!(atoms, atom1)
 		x2 = L; y2 = L; z2 = L
-		while x1 + x2 > L     || y1 + y2 > L    || z1 + z2 > L    ||
+		while x1 + x2 > L       || y1 + y2 > L    || z1 + z2 > L  ||
 		      x1 + x2 < 0.0u"Å" || y1 + y2 < 0.0u"Å" || z1 + z2 < 0.0u"Å"
         	ϕ = rand() * 2.0 * π; θ = rand() * π
 	        x2 = d * cos(ϕ) * sin(θ)
@@ -205,7 +205,7 @@ md" ## Defining the loss functions"
 md"A simple loss function is defined. It calculates the root mean square error (rmse) between each component of the surrogate forces and the forces computed using the neural network model (defined below). The arguments of this loss function are batches of the training or test data set, N is the batch size."
 
 # ╔═╡ dd5e6c1f-ad9b-49fa-8b5e-9cffd5781c16
-md"$loss(f^{model}, f^{dft}) = \sqrt{\frac{ {\sum_{i}^{N}\sum_{k=\{x,y,z\}} (f^{model}_{i,k} - f^{dft}_{i,k}) ^2} } {3N}}$"
+md"$loss(f^{model}, f^{surr}) = \sqrt{\frac{ {\sum_{i}^{N}\sum_{k=\{x,y,z\}} (f^{model}_{i,k} - f^{surr}_{i,k}) ^2} } {3N}}$"
 
 # ╔═╡ 7b48d757-18eb-4f6b-bf7f-53d8c52cf7a1
 loss(f_model, forces) = 
@@ -228,7 +228,7 @@ f_model(neighbor_pos_diffs_i, model) = length(neighbor_pos_diffs_i)>0 ?
 md"The global loss or loss of an entire data set (training or test) is the average of the losses of the batches in that data set. M is the number of batches."
 
 # ╔═╡ 48e7fa16-ea5f-44f5-84ab-2994e7382c4e
-md"$\frac{1}{M} \sum_{b \ \epsilon \ \#batches(training\_set)} loss(f^{model}_b, f^{dft}_b)$"
+md"$\frac{1}{M} \sum_{b \ \epsilon \ \#batches(training\_set)} loss(f^{model}_b, f^{surr}_b)$"
 
 # ╔═╡ 7410e309-2ee0-4b65-af2a-c4f738a3bd80
 global_loss(loader, model) = 
@@ -268,12 +268,12 @@ md"The neural network model and the parameters to be optimized are defined using
 
 # ╔═╡ c8c43e19-daff-4272-8703-a2dcaceca7a9
 begin
-cpu_model = Chain(Dense(3,200,Flux.relu),Dense(200,200,Flux.relu),Dense(200,3))
+cpu_model = Chain(Dense(3,200,Flux.relu),Dense(200,200,Flux.relu),Dense(200,200,Flux.relu),Dense(200,3))
 cpu_ps = Flux.params(cpu_model) # model's trainable parameters
 end
 
 # ╔═╡ fcccc8ca-97c8-43cd-ab1d-b76f126ab617
-md"The optimizer [ADAM](https://en.wikipedia.org/wiki/Stochastic_gradient_descent#Adam) is defined using a learning rate η = 0.1."
+md"The optimizer [ADAM](https://en.wikipedia.org/wiki/Stochastic_gradient_descent#Adam) is defined using a learning rate η = 0.001."
 
 # ╔═╡ 49d7f00a-db88-4dab-9209-c9840255d999
 opt = ADAM(0.001)
@@ -283,7 +283,7 @@ md"The model is trained in the loop below. At each iteration or epoch, the gradi
 
 # ╔═╡ 2e199532-5177-4b39-9c7e-83d61c1e2f13
 begin
-epochs = 50
+epochs = 15
 with_terminal() do
 	for epoch in 1:epochs
 	    # Training of one epoch
@@ -308,16 +308,54 @@ md"The loss of the test data set is calculated using the root mean squared error
 @show "Test RMSE: $(global_loss(cpu_test_loader, cpu_model))"
 
 # ╔═╡ 97cd889b-7fd5-494a-8f34-5830e53557f6
-md"The following plot shows the norm of the forces computed by the neural network model and the surrogate model."
+md"The following plots show the forces computed by the neural network model and the surrogate model w.r.t. the norm of the position differences $|r_i-r_j|$. 30 forces are computed per each $|r_i-r_j|$."
 
-# ╔═╡ 2dcc5427-b2e1-416f-8c46-957b39ac42d9
+# ╔═╡ abf7c48c-221b-43d7-a583-716b192bc5f6
 begin
 	rs = 1.15:0.001:2.0
-	fs_model = [ norm(cpu_model([n, 0.0, 0.0])) for n in rs ]
-	fs_dft = [ norm(force([n, 0.0, 0.0], lj)) for n in rs ]
-	plot(rs, fs_model, label = "Neural network model force")
-	plot!(rs, fs_dft, label = "Lennard-Jones force")
+	rss = []
+	fs_model = []
+	fs_surr = []
+	for r in rs
+		for _ in 1:30
+			ϕ = rand() * 2.0 * π; θ = rand() * π
+			x_ij = r * cos(ϕ) * sin(θ) 
+			y_ij = r * sin(ϕ) * sin(θ) 
+			z_ij = r * cos(θ)          
+			r_ij = [x_ij, y_ij, z_ij]
+			push!(rss, r)
+			push!(fs_model, cpu_model(r_ij))
+			push!(fs_surr, force(r_ij, lj))
+		end
+	end
 end
+
+# ╔═╡ 276e1787-d15e-4094-bf00-30b6192228e1
+begin
+	plot(rss, norm.(fs_model), seriestype = :scatter, markerstrokewidth=0,
+		 xlabel = "Norm of the position difference, |ri-rj|", 
+	  	 ylabel = "Norm of the force", 
+		 label = "Neural network model force norm")
+	plot!(rss, norm.(fs_surr), seriestype = :scatter, markerstrokewidth=0,
+		  label = "Surrogate force norm")
+end
+
+# ╔═╡ d22ab6ee-4184-4dfc-a9bb-2af4f0de5882
+begin
+	px =plot( [f[1] for f in fs_surr], [f[1] for f in fs_model], 
+		      seriestype = :scatter, markerstrokewidth=0, label="",
+		      xlabel = "Fx, surrogate model", ylabel = "Fx, NN model")
+	py =plot( [f[2] for f in fs_surr], [f[2] for f in fs_model], 
+		      seriestype = :scatter, markerstrokewidth=0, label="",
+              xlabel = "Fy, surrogate model", ylabel = "Fy, NN model")
+    pz =plot( [f[3] for f in fs_surr], [f[3] for f in fs_model], 
+		      seriestype = :scatter, markerstrokewidth=0, label="",
+              xlabel = "Fz, surrogate model", ylabel = "Fz, NN model")
+	plot(px, py, pz)
+end
+
+# ╔═╡ d720916f-8ed8-4caf-bcf1-43da2f78e21a
+md"Test invariants with respect to permutation, translation, and rotation."
 
 # ╔═╡ 4d94701b-e3a5-4aef-ba23-97c1150f89a1
 md"## Defining and training the model in GPU"
@@ -346,11 +384,11 @@ md"The model is trained in the loop below. In this case the elapsed time is meas
 
 # ╔═╡ c6e66ff5-b5f2-4c0f-9eae-f123034bd438
 begin
-epochs_ = 50
+epochs_ = 15
 with_terminal() do
 	for epoch in 1:epochs_
 	    # Training of one epoch
-	    time = CUDA.@elapsed for (d, f) in gpu_train_loader # or 
+	    time = CUDA.@elapsed for (d, f) in gpu_train_loader
 	        gs = gradient(() -> loss(f_model.(d, [gpu_model]), f), gpu_ps)
 	        Flux.Optimise.update!(opt, gpu_ps, gs)
 	    end
@@ -361,16 +399,6 @@ with_terminal() do
 end
 end
 
-# ╔═╡ c2360180-2b3e-41ad-b427-cf98a23deacd
-md"The following plot shows the norm of the forces computed by the neural network model and the surrogate model."
-
-# ╔═╡ bbc5ddbc-efd2-48b7-a0e8-3e288eeb4f1a
-begin
-	fs_model_gpu = [ norm(gpu_model(device2([n, 0.0, 0.0]))) for n in rs ]
-	plot(rs, fs_model_gpu, label = "Neural network model force")
-	plot!(rs, fs_dft, label = "Lennard-Jones force")
-end
-
 # ╔═╡ 24f677cf-ee87-4af0-9c11-5d0911f1c700
 md"### Test GPU results"
 
@@ -379,6 +407,55 @@ md"Again, the loss of the test data set is calculated using the root mean square
 
 # ╔═╡ d300f5ce-2cce-4739-9108-ef20ff889955
 @show "Test RMSE: $(global_loss(gpu_test_loader, gpu_model))"
+
+# ╔═╡ ee8c4a30-b9e3-4987-b17c-69523037c749
+md"The following plots show the forces computed by the neural network model and the surrogate model w.r.t. the norm of the position differences $|r_i-r_j|$. 30 forces are computed per each $|r_i-r_j|$."
+
+# ╔═╡ f8a1b9de-46c9-4b9c-86ce-f71245fd020d
+begin
+	rss_gpu = []
+	fs_model_gpu = []
+	fs_surr_gpu = []
+	for r in rs
+		for _ in 1:30
+			ϕ = rand() * 2.0 * π; θ = rand() * π
+			x_ij = r * cos(ϕ) * sin(θ) 
+			y_ij = r * sin(ϕ) * sin(θ) 
+			z_ij = r * cos(θ)          
+			r_ij = [x_ij, y_ij, z_ij]
+			push!(rss_gpu, r)
+			push!(fs_model_gpu, gpu_model(cu(r_ij)))
+			push!(fs_surr_gpu, force(r_ij, lj))
+		end
+	end
+end
+
+# ╔═╡ a6999df8-850c-4ec7-8717-b4111cafebad
+begin
+	plot(rss_gpu, norm.(fs_model_gpu), seriestype = :scatter, markerstrokewidth=0,
+		 xlabel = "Norm of the position difference, |ri-rj|", 
+	  	 ylabel = "Norm of the force", 
+		 label = "Neural network model force norm")
+	plot!(rss_gpu, norm.(fs_surr_gpu), seriestype = :scatter, markerstrokewidth=0,
+		  label = "Surrogate force norm")
+end
+
+# ╔═╡ 6ed86dde-63dd-429a-97f2-c901385f4bb7
+begin
+px_gpu =plot( [Array(f)[1] for f in fs_surr_gpu],
+	          [Array(f)[1] for f in fs_model_gpu], 
+			   seriestype = :scatter, markerstrokewidth=0, label="",
+			   xlabel = "Fx, surrogate model", ylabel = "Fx, NN model")
+py_gpu =plot( [Array(f)[2] for f in fs_surr_gpu],
+	          [Array(f)[2] for f in fs_model_gpu], 
+			   seriestype = :scatter, markerstrokewidth=0, label="",
+			   xlabel = "Fy, surrogate model", ylabel = "Fy, NN model")
+pz_gpu =plot( [Array(f)[3] for f in fs_surr_gpu],
+	          [Array(f)[3] for f in fs_model_gpu], 
+			   seriestype = :scatter, markerstrokewidth=0, label="",
+			   xlabel = "Fz, surrogate model", ylabel = "Fz, NN model")
+plot(px_gpu, py_gpu, pz_gpu)
+end
 
 # ╔═╡ Cell order:
 # ╟─5dd8b98b-967c-46aa-9932-25157a10d0c2
@@ -431,16 +508,21 @@ md"Again, the loss of the test data set is calculated using the root mean square
 # ╟─46a7f1ab-5f99-4b69-9bff-c299815cccab
 # ╠═195925f3-19ea-47a2-bc31-561bf698f580
 # ╟─97cd889b-7fd5-494a-8f34-5830e53557f6
-# ╠═2dcc5427-b2e1-416f-8c46-957b39ac42d9
+# ╠═abf7c48c-221b-43d7-a583-716b192bc5f6
+# ╠═276e1787-d15e-4094-bf00-30b6192228e1
+# ╠═d22ab6ee-4184-4dfc-a9bb-2af4f0de5882
+# ╟─d720916f-8ed8-4caf-bcf1-43da2f78e21a
 # ╟─4d94701b-e3a5-4aef-ba23-97c1150f89a1
 # ╟─c2492af2-23e7-45c5-bf44-109c59d7986d
 # ╠═d4526269-07e6-4684-8bed-7cee5898ef52
-# ╠═a67f8826-ee85-4e74-aec5-dd2c79c56c13
+# ╟─a67f8826-ee85-4e74-aec5-dd2c79c56c13
 # ╠═5a7e8a3f-3d8d-4048-80fe-c64e9c1cfd44
 # ╟─f89622bb-433a-4547-aec0-9fd3a2ffbaf2
 # ╠═c6e66ff5-b5f2-4c0f-9eae-f123034bd438
-# ╟─c2360180-2b3e-41ad-b427-cf98a23deacd
-# ╠═bbc5ddbc-efd2-48b7-a0e8-3e288eeb4f1a
 # ╟─24f677cf-ee87-4af0-9c11-5d0911f1c700
 # ╟─04ff7b49-1feb-4b19-9b57-3ddad117427d
 # ╠═d300f5ce-2cce-4739-9108-ef20ff889955
+# ╟─ee8c4a30-b9e3-4987-b17c-69523037c749
+# ╠═f8a1b9de-46c9-4b9c-86ce-f71245fd020d
+# ╠═a6999df8-850c-4ec7-8717-b4111cafebad
+# ╠═6ed86dde-63dd-429a-97f2-c901385f4bb7
