@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.17.5
+# v0.17.7
 
 using Markdown
 using InteractiveUtils
@@ -7,14 +7,17 @@ using InteractiveUtils
 # ╔═╡ a904c8dc-c7fa-4ef7-97f0-9018bb9f2db2
 begin
 import Pkg
-Pkg.add("Unitful")
-Pkg.add("PeriodicTable")
 Pkg.add("StaticArrays")
 Pkg.add("LinearAlgebra")
+Pkg.add("Unitful")
+Pkg.add("PeriodicTable")
 Pkg.add("AtomsBase")
 Pkg.add("InteratomicPotentials")
-#Pkg.add(url="https://github.com/JuliaMolSim/AtomsBase.jl", rev="v0.1.0")
-#Pkg.add(url="https://github.com/cesmix-mit/InteratomicPotentials.jl", rev="v0.1.2")
+Pkg.add("Flux")
+Pkg.add("BSON")
+Pkg.add("CUDA")
+Pkg.add("Plots")
+Pkg.add("PlutoUI")
 end
 
 # ╔═╡ 5f6d4c16-bf9f-442a-bb43-5cbe1b861fb1
@@ -27,6 +30,7 @@ using AtomsBase
 using InteratomicPotentials
 using Flux
 using Flux.Data: DataLoader
+using BSON: @save
 using CUDA
 using Plots
 using PlutoUI
@@ -74,42 +78,42 @@ md" ## Generating a simple surrogate DFT dataset"
 md"The following function generates a vector of atomic configurations. Each atomic configuration is defined using AtomsBase.jl, in particular with a `FlexibleSystem`. It contains information about the domain and its boundaries, as well as the atoms that compose it. The domain has zero Dirichlet boundary conditions. In this example each configuration contains a binary Argon system. Each atom is represented by a `StaticAtom`. The positions of the atoms are calculated randomly within the domain under the constraint that both atoms are at a fixed distance. Modify this function if you want to change the distribution of the atoms :)"
 
 # ╔═╡ 3e606585-86b6-4389-818d-bcbdb6078608
-function gen_atomic_confs()
+function gen_atomic_confs(σ, rs)
     # Domain
-    L = 10u"Å"
+    L = σ * 10.0u"nm"
     box = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]] * L
     # Boundary conditions
     bcs = [DirichletZero(), DirichletZero(), DirichletZero()]
     # No. of atoms per configuration
     N = 2
     # No. of configurations
-    M = 50000
+    M = 15000
     # Element
-    elem = elements[:Ar]
+	elem = :Ar
     # Define atomic configurations
     atomic_confs = []
-	dists = collect(1.15:0.001:2.1)u"Å"
+	dists = collect(rs)u"nm"
 	for j in 1:M
 		d = dists[rand(1:length(dists))]
         atoms = []
-        x1 = rand(0.1:0.1:L.val)u"Å"
-        y1 = rand(0.1:0.1:L.val)u"Å"
-        z1 = rand(0.1:0.1:L.val)u"Å"
+        x1 = rand(0.1:0.1:L.val)u"nm"
+        y1 = rand(0.1:0.1:L.val)u"nm"
+        z1 = rand(0.1:0.1:L.val)u"nm"
         pos1 = SVector{3}(x1, y1, z1)
-        atom1 = StaticAtom(pos1, elem)
+		atom1 = Atom(elem => pos1)
         push!(atoms, atom1)
 		x2 = L; y2 = L; z2 = L
-		while x1 + x2 > L       || y1 + y2 > L    || z1 + z2 > L  ||
-		      x1 + x2 < 0.0u"Å" || y1 + y2 < 0.0u"Å" || z1 + z2 < 0.0u"Å"
+		while x1 + x2 > L        || y1 + y2 > L        || z1 + z2 > L  ||
+		      x1 + x2 < 0.0u"nm" || y1 + y2 < 0.0u"nm" || z1 + z2 < 0.0u"nm"
         	ϕ = rand() * 2.0 * π; θ = rand() * π
 	        x2 = d * cos(ϕ) * sin(θ)
 	        y2 = d * sin(ϕ) * sin(θ)
 	        z2 = d * cos(θ)
 		end
         pos2 = SVector{3}(x1+x2, y1+y2, z1+z2)
-        atom2 = StaticAtom(pos2, elem)
+		atom2 = Atom(elem => pos2)
         push!(atoms, atom2)
-        push!(atomic_confs, FlexibleSystem(box, bcs, atoms))
+		push!(atomic_confs, FastSystem(atoms, box, bcs))
     end
     return atomic_confs
 end
@@ -135,7 +139,7 @@ function compute_neighbor_pos_diffs(atomic_conf, rcutoff)
         for j in 1:N
             rij = position(getindex(atomic_conf, i)) -
                   position(getindex(atomic_conf, j))
-			rij = [map((x -> x.val), rij.data)...] # removing units
+			rij = SVector(map((x -> x.val), rij.data)...) # removing units
             if 0 < norm(rij) < rcutoff
                 push!(neighbor_pos_diffs_i, rij)
             end
@@ -149,17 +153,17 @@ end
 md"Next function calculates the surrogate DFT force $f^{dft}_i$ of each atom $i$ using the position difference $r_{i,j}$ to each of its neighbors $j$ and the potential $p$ (e.g. [LennardJones](https://en.wikipedia.org/wiki/Lennard-Jones_potential))."
 
 # ╔═╡ 40c9d9cd-05af-4bbf-a772-5c09c1b03a66
-md"$f^{dft}_i = \sum_{\substack{j \neq i \\ |r_i - r_j| < r_{cut}}} f^{dft}_{i,j}$"
+md"$f^{surr}_i = \sum_{\substack{j \neq i \\ |r_i - r_j| < r_{cut}}} f^{surr_{i,j}$"
 
 # ╔═╡ 93450770-74c0-42f7-baca-7f8276373f9f
-md"$f^{dft}_{i,j} = - \nabla LJ_{(r_{i,j})} = 24 ϵ  \left( 2 \left( \frac{σ}{|r_{i,j}|} \right) ^{12} -  \left( \frac{σ}{|r_{i,j}|} \right) ^6  \right) \frac{r_{i,j} }{|r_{i,j}|^2 }$"
+md"$f^{surr}_{i,j} = - \nabla LJ_{(r_{i,j})} = 24 ϵ  \left( 2 \left( \frac{σ}{|r_{i,j}|} \right) ^{12} -  \left( \frac{σ}{|r_{i,j}|} \right) ^6  \right) \frac{r_{i,j} }{|r_{i,j}|^2 }$"
 
 # ╔═╡ 216f84d3-ec5c-4c49-a9d7-af0e98907e15
 md"Here, the force between $i$ and $j$ is computed by the [InteratomicPotentials.jl](https://github.com/cesmix-mit/InteratomicPotentials.jl) library."
 
 # ╔═╡ 6e20dcb0-2fed-4637-ae07-775f3cd4a8dd
 function compute_forces(neighbor_pos_diffs_i, p)
-    return [ length(rij)>0 ? sum(force.(rij, [p])) : SVector(0.0, 0.0, 0.0)                        for rij in neighbor_pos_diffs_i ]
+    return [ length(rij)>0 ? sum(force.(norm.(rij), rij, [p])) : SVector(0.0, 0.0, 0.0)                        for rij in neighbor_pos_diffs_i ]
 end
 
 # ╔═╡ 8aa8f56a-24a1-4ddd-840e-91517fd27b9c
@@ -167,14 +171,15 @@ md"The following function generates the training and test data sets consisting o
 
 
 # ╔═╡ 8787b0dc-81f5-4e15-8931-4f8325d45061
-function gen_data(train_prop, batchsize, rcutoff, p, use_cuda, device)
+function gen_data(train_prop, batchsize, p, rs, use_cuda, device)
     ENV["DATADEPS_ALWAYS_ACCEPT"] = "true"
 
     # Generate atomic configurations
-    atomic_confs = gen_atomic_confs()
+    atomic_confs = gen_atomic_confs(p.σ, rs)
 
     # Generate neighbor position differences
-    neighbor_pos_diffs = vcat(compute_neighbor_pos_diffs.(atomic_confs, rcutoff)...)
+    neighbor_pos_diffs = vcat(compute_neighbor_pos_diffs.(atomic_confs, p.rcutoff)...)
+
     N = floor(Int, train_prop * length(neighbor_pos_diffs))
     train_neighbor_pos_diffs = neighbor_pos_diffs[1:N]
     test_neighbor_pos_diffs = neighbor_pos_diffs[N+1:end]
@@ -185,8 +190,8 @@ function gen_data(train_prop, batchsize, rcutoff, p, use_cuda, device)
     
     # If CUDA is used, convert SVector to Vector and transfer vectors to GPU
     if use_cuda
-        train_neighbor_pos_diffs = device([ device.(convert.(Vector, d)) for d in train_neighbor_pos_diffs ])
-		test_neighbor_pos_diffs = device([ device.(convert.(Vector, d)) for d in test_neighbor_pos_diffs ])
+  		train_neighbor_pos_diffs = [ device.(convert.(Vector, d)) for d in train_neighbor_pos_diffs ]
+		test_neighbor_pos_diffs = [ device.(convert.(Vector, d)) for d in test_neighbor_pos_diffs ]
         f_train = device.(convert.(Vector, f_train))
         f_test = device.(convert.(Vector, f_test))
     end
@@ -221,8 +226,8 @@ md"$f^{model}_i = \sum_{r_{i,j} \ \epsilon \ neighbors\_dists(i) } model(r_{i,j}
 md"The following function computes $f^{model}$ for a batch of atoms"
 
 # ╔═╡ 8a03ffbc-9ab2-438d-b71b-1d7238b33507
-f_model(neighbor_pos_diffs_i, model) = length(neighbor_pos_diffs_i)>0 ?
-                                       sum(model.(neighbor_pos_diffs_i)) : zeros(3)
+f_model(neighbor_pos_diffs_i, model, dev) = 
+  length(neighbor_pos_diffs_i)>0 ? sum(model.(neighbor_pos_diffs_i)) : dev(zeros(3))
 
 # ╔═╡ 2c629ed0-e21d-4f38-b46f-fc2a1757b62f
 md"The global loss or loss of an entire data set (training or test) is the average of the losses of the batches in that data set. M is the number of batches."
@@ -231,8 +236,8 @@ md"The global loss or loss of an entire data set (training or test) is the avera
 md"$\frac{1}{M} \sum_{b \ \epsilon \ \#batches(training\_set)} loss(f^{model}_b, f^{surr}_b)$"
 
 # ╔═╡ 7410e309-2ee0-4b65-af2a-c4f738a3bd80
-global_loss(loader, model) = 
-        sum([loss(f_model.(d, [model]), f) for (d, f) in loader]) / length(loader)
+global_loss(loader, model, dev) = 
+    sum([loss(f_model.(d, [model], [dev]), f) for (d, f) in loader]) / length(loader)
 
 # ╔═╡ 2244cd54-f927-40e0-8fad-75a34096044d
 md"More complex examples can also fit energies and tensors, and define hybrid potentials."
@@ -247,7 +252,9 @@ md"The first step is to define an interatomic potential to generate the surrogat
 begin
 lj_ϵ = 1.0
 lj_σ = 1.0
-lj = LennardJones(lj_ϵ, lj_σ);
+rcutoff = 2.0 * lj_σ
+rs = 1.15:0.0001:rcutoff
+lj = LennardJones(lj_ϵ, lj_σ, rcutoff);
 end
 
 # ╔═╡ f1a29169-2c8a-41bc-9c35-be2c77b418ec
@@ -255,12 +262,11 @@ md"Training and test datasets are generated based on the interatomic potential, 
 
 # ╔═╡ 54891249-99be-4798-a0e9-5b0193ecaa3c
 begin
-rcutoff = 2.5 * lj_σ
 train_prop = 0.8
 batchsize = 256
 use_cuda = false
 device1 = cpu
-cpu_train_loader, cpu_test_loader = gen_data(train_prop, batchsize, rcutoff, lj, use_cuda, device1)
+cpu_train_loader, cpu_test_loader = gen_data(train_prop, batchsize, lj, rs, use_cuda, device1)
 end
 
 # ╔═╡ 1cb8b6d0-d645-4d16-a501-cc9d2a047b39
@@ -268,8 +274,9 @@ md"The neural network model and the parameters to be optimized are defined using
 
 # ╔═╡ c8c43e19-daff-4272-8703-a2dcaceca7a9
 begin
-cpu_model = Chain(Dense(3,200,Flux.relu),Dense(200,200,Flux.relu),Dense(200,200,Flux.relu),Dense(200,3))
-cpu_ps = Flux.params(cpu_model) # model's trainable parameters
+	cpu_model = Chain(Dense(3,250,Flux.relu),Dense(250,250,Flux.relu),
+		              Dense(250,250,Flux.relu),Dense(250,3))
+	cpu_ps = Flux.params(cpu_model) # model's trainable parameters
 end
 
 # ╔═╡ fcccc8ca-97c8-43cd-ab1d-b76f126ab617
@@ -283,19 +290,19 @@ md"The model is trained in the loop below. At each iteration or epoch, the gradi
 
 # ╔═╡ 2e199532-5177-4b39-9c7e-83d61c1e2f13
 begin
-epochs = 15
-with_terminal() do
-	for epoch in 1:epochs
-	    # Training of one epoch
-	    time = Base.@elapsed for (d, f) in cpu_train_loader
-	        gs = gradient(() -> loss(f_model.(d, [cpu_model]), f), cpu_ps)
-	        Flux.Optimise.update!(opt, cpu_ps, gs)
-	    end
-	    
-	    # Report traning loss
-	    println("Epoch: $(epoch), loss: $(global_loss(cpu_train_loader, cpu_model)), time: $(time)")
+	epochs = 15
+	with_terminal() do
+		for epoch in 1:epochs
+		    # Training of one epoch
+		    time = Base.@elapsed for (d, f) in cpu_train_loader
+		        gs = gradient(() -> loss(f_model.(d, [cpu_model], [device1]), f), cpu_ps)
+		        Flux.Optimise.update!(opt, cpu_ps, gs)
+		    end
+		    
+		    # Report traning loss
+		    println("Epoch: $(epoch), loss: $(global_loss(cpu_train_loader, cpu_model, device1)), time: $(time)")
+		end
 	end
-end
 end
 
 # ╔═╡ 74d94c45-7a66-4779-9bd8-d6987d23bdc4
@@ -305,27 +312,24 @@ md"### Test CPU results"
 md"The loss of the test data set is calculated using the root mean squared error (rmse)"
 
 # ╔═╡ 195925f3-19ea-47a2-bc31-561bf698f580
-@show "Test RMSE: $(global_loss(cpu_test_loader, cpu_model))"
+@show "Test RMSE: $(global_loss(cpu_test_loader, cpu_model, device1))"
 
 # ╔═╡ 97cd889b-7fd5-494a-8f34-5830e53557f6
 md"The following plots show the forces computed by the neural network model and the surrogate model w.r.t. the norm of the position differences $|r_i-r_j|$. 30 forces are computed per each $|r_i-r_j|$."
 
 # ╔═╡ abf7c48c-221b-43d7-a583-716b192bc5f6
 begin
-	rs = 1.15:0.001:2.0
-	rss = []
-	fs_model = []
-	fs_surr = []
+	rss = []; fs_model = []; fs_surr = []
 	for r in rs
 		for _ in 1:30
 			ϕ = rand() * 2.0 * π; θ = rand() * π
 			x_ij = r * cos(ϕ) * sin(θ) 
 			y_ij = r * sin(ϕ) * sin(θ) 
 			z_ij = r * cos(θ)          
-			r_ij = [x_ij, y_ij, z_ij]
+			r_ij = SVector(x_ij, y_ij, z_ij)
 			push!(rss, r)
 			push!(fs_model, cpu_model(r_ij))
-			push!(fs_surr, force(r_ij, lj))
+			push!(fs_surr, force(norm(r_ij), r_ij, lj))
 		end
 	end
 end
@@ -354,8 +358,14 @@ begin
 	plot(px, py, pz)
 end
 
-# ╔═╡ d720916f-8ed8-4caf-bcf1-43da2f78e21a
-md"Test invariants with respect to permutation, translation, and rotation."
+# ╔═╡ b8209b52-3517-4166-90b6-eb3cbc2ab997
+md"### Saving trained neural network model"
+
+# ╔═╡ a79edbd3-5837-40ae-9def-af4b0655c978
+begin
+	@save "lennard-jones-nn-model.bson" cpu_model
+	@save "lennard-jones-nn-model-params.bson" cpu_ps
+end
 
 # ╔═╡ 4d94701b-e3a5-4aef-ba23-97c1150f89a1
 md"## Defining and training the model in GPU"
@@ -365,9 +375,9 @@ md"This case is analogous to that of the CPU except for some differences. First,
 
 # ╔═╡ d4526269-07e6-4684-8bed-7cee5898ef52
 begin
-use_cuda_ = true
-device2 = gpu
-gpu_train_loader, gpu_test_loader = gen_data(train_prop, batchsize, rcutoff, lj, use_cuda_, device2)
+	use_cuda_ = true
+	device2 = gpu
+	gpu_train_loader, gpu_test_loader = gen_data(train_prop, batchsize, lj, rs,                                                        use_cuda_, device2)
 end
 
 # ╔═╡ a67f8826-ee85-4e74-aec5-dd2c79c56c13
@@ -375,8 +385,9 @@ md"Also, the model with its parameters is transferred to the GPU."
 
 # ╔═╡ 5a7e8a3f-3d8d-4048-80fe-c64e9c1cfd44
 begin
-gpu_model = Chain(Dense(3,200,Flux.relu),Dense(200,200,Flux.relu),Dense(200,3)) |> device2
-gpu_ps = Flux.params(gpu_model) # model's trainable parameters
+	gpu_model = Chain(Dense(3,200,Flux.relu),Dense(200,200,Flux.relu),
+		              Dense(200,3)) |> device2
+	gpu_ps = Flux.params(gpu_model) # model's trainable parameters
 end
 
 # ╔═╡ f89622bb-433a-4547-aec0-9fd3a2ffbaf2
@@ -384,19 +395,18 @@ md"The model is trained in the loop below. In this case the elapsed time is meas
 
 # ╔═╡ c6e66ff5-b5f2-4c0f-9eae-f123034bd438
 begin
-epochs_ = 15
-with_terminal() do
-	for epoch in 1:epochs_
-	    # Training of one epoch
-	    time = CUDA.@elapsed for (d, f) in gpu_train_loader
-	        gs = gradient(() -> loss(f_model.(d, [gpu_model]), f), gpu_ps)
-	        Flux.Optimise.update!(opt, gpu_ps, gs)
-	    end
-	    
-	    # Report traning loss
-	    println("Epoch: $(epoch), loss: $(global_loss(gpu_train_loader, gpu_model)), time: $(time)")
+	with_terminal() do
+		for epoch in 1:epochs
+		    # Training of one epoch
+		    time = CUDA.@elapsed for (d, f) in gpu_train_loader
+		        gs = gradient(() -> loss(f_model.(d, [gpu_model], [device2]), f), gpu_ps)
+		        Flux.Optimise.update!(opt, gpu_ps, gs)
+		    end
+		    
+		    # Report traning loss
+		    println("Epoch: $(epoch), loss: $(global_loss(gpu_train_loader, gpu_model, device2)), time: $(time)")
+		end
 	end
-end
 end
 
 # ╔═╡ 24f677cf-ee87-4af0-9c11-5d0911f1c700
@@ -406,26 +416,24 @@ md"### Test GPU results"
 md"Again, the loss of the test data set is calculated using the root mean squared error (rmse)"
 
 # ╔═╡ d300f5ce-2cce-4739-9108-ef20ff889955
-@show "Test RMSE: $(global_loss(gpu_test_loader, gpu_model))"
+@show "Test RMSE: $(global_loss(gpu_test_loader, gpu_model, device2))"
 
 # ╔═╡ ee8c4a30-b9e3-4987-b17c-69523037c749
 md"The following plots show the forces computed by the neural network model and the surrogate model w.r.t. the norm of the position differences $|r_i-r_j|$. 30 forces are computed per each $|r_i-r_j|$."
 
 # ╔═╡ f8a1b9de-46c9-4b9c-86ce-f71245fd020d
 begin
-	rss_gpu = []
-	fs_model_gpu = []
-	fs_surr_gpu = []
+	rss_gpu = []; fs_model_gpu = []; fs_surr_gpu = []
 	for r in rs
 		for _ in 1:30
 			ϕ = rand() * 2.0 * π; θ = rand() * π
 			x_ij = r * cos(ϕ) * sin(θ) 
 			y_ij = r * sin(ϕ) * sin(θ) 
 			z_ij = r * cos(θ)          
-			r_ij = [x_ij, y_ij, z_ij]
+			r_ij = SVector(x_ij, y_ij, z_ij)
 			push!(rss_gpu, r)
-			push!(fs_model_gpu, gpu_model(cu(r_ij)))
-			push!(fs_surr_gpu, force(r_ij, lj))
+			push!(fs_model_gpu, gpu_model(device2(convert(Vector,r_ij))))
+			push!(fs_surr_gpu, force(norm(r_ij), r_ij, lj))
 		end
 	end
 end
@@ -442,19 +450,19 @@ end
 
 # ╔═╡ 6ed86dde-63dd-429a-97f2-c901385f4bb7
 begin
-px_gpu =plot( [Array(f)[1] for f in fs_surr_gpu],
-	          [Array(f)[1] for f in fs_model_gpu], 
-			   seriestype = :scatter, markerstrokewidth=0, label="",
-			   xlabel = "Fx, surrogate model", ylabel = "Fx, NN model")
-py_gpu =plot( [Array(f)[2] for f in fs_surr_gpu],
-	          [Array(f)[2] for f in fs_model_gpu], 
-			   seriestype = :scatter, markerstrokewidth=0, label="",
-			   xlabel = "Fy, surrogate model", ylabel = "Fy, NN model")
-pz_gpu =plot( [Array(f)[3] for f in fs_surr_gpu],
-	          [Array(f)[3] for f in fs_model_gpu], 
-			   seriestype = :scatter, markerstrokewidth=0, label="",
-			   xlabel = "Fz, surrogate model", ylabel = "Fz, NN model")
-plot(px_gpu, py_gpu, pz_gpu)
+	px_gpu =plot( [Array(f)[1] for f in fs_surr_gpu],
+		          [Array(f)[1] for f in fs_model_gpu], 
+				   seriestype = :scatter, markerstrokewidth=0, label="",
+				   xlabel = "Fx, surrogate model", ylabel = "Fx, NN model")
+	py_gpu =plot( [Array(f)[2] for f in fs_surr_gpu],
+		          [Array(f)[2] for f in fs_model_gpu], 
+				   seriestype = :scatter, markerstrokewidth=0, label="",
+				   xlabel = "Fy, surrogate model", ylabel = "Fy, NN model")
+	pz_gpu =plot( [Array(f)[3] for f in fs_surr_gpu],
+		          [Array(f)[3] for f in fs_model_gpu], 
+				   seriestype = :scatter, markerstrokewidth=0, label="",
+				   xlabel = "Fz, surrogate model", ylabel = "Fz, NN model")
+	plot(px_gpu, py_gpu, pz_gpu)
 end
 
 # ╔═╡ Cell order:
@@ -511,7 +519,8 @@ end
 # ╠═abf7c48c-221b-43d7-a583-716b192bc5f6
 # ╠═276e1787-d15e-4094-bf00-30b6192228e1
 # ╠═d22ab6ee-4184-4dfc-a9bb-2af4f0de5882
-# ╟─d720916f-8ed8-4caf-bcf1-43da2f78e21a
+# ╟─b8209b52-3517-4166-90b6-eb3cbc2ab997
+# ╠═a79edbd3-5837-40ae-9def-af4b0655c978
 # ╟─4d94701b-e3a5-4aef-ba23-97c1150f89a1
 # ╟─c2492af2-23e7-45c5-bf44-109c59d7986d
 # ╠═d4526269-07e6-4684-8bed-7cee5898ef52
