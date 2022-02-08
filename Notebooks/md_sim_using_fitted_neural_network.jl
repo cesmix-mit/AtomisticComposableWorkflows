@@ -45,6 +45,9 @@ begin
 	using PlutoUI
 end
 
+# ╔═╡ a35fd14d-119a-4113-9dd8-9787d41195fc
+md"# [WIP] Classical MD using empirical and learned potentials"
+
 # ╔═╡ 36efeddd-2c74-4ce9-9f4d-b6b9b1a2a1c5
 md"## Installing packages and loading modules"
 
@@ -64,7 +67,7 @@ Pkg.status("InteratomicPotentials")
 Pkg.status("Atomistic")
 
 # ╔═╡ 485f2c9c-d116-496b-a55b-c165f3cf3219
-md"## Molecular dynamics simulation: Argon case study"
+md"## MD simulation: Argon case study"
 
 # ╔═╡ ee273d30-26eb-4f8e-bb78-13dbfcd6e334
 md"[Argon study case](https://github.com/cesmix-mit/Atomistic.jl/blob/main/examples/argon/lj_simulation_external.jl)"
@@ -119,7 +122,7 @@ end
 eq_result_lj, prod_result_lj = run_md(potential_lj)
 
 # ╔═╡ 207f6094-dba3-4dfe-b6fe-7c51475d0288
-md"## MD using learned potential"
+md"## MD using a learned potential"
 
 # ╔═╡ 59529eca-b7d7-4899-bdf1-ac2539fbc9d2
 md"Loading neural network model and trained parameters."
@@ -147,20 +150,32 @@ begin
 
 	function InteratomicPotentials.potential_energy(R::AbstractFloat, 
 		                                            p::LearnedPotential)
-		InteratomicPotentials.potential_energy(R, potential_lj)
+		return ϵ * first(p.model([R]))
+		I#nteratomicPotentials.potential_energy(R, potential_lj)
 	end
 	
 	function InteratomicPotentials.force(R::AbstractFloat,
 		                                 r::SVector{3,<:AbstractFloat}, 
 		                                 p::LearnedPotential)
-		InteratomicPotentials.force(R, r, potential_lj)
-	    #p.model(r)
+		fx = x -> first(p.model([norm([x, r[2], r[3]])]))
+		fy = y -> first(p.model([norm([r[1], y, r[3]])]))
+		fz = z -> first(p.model([norm([r[1], r[2], z])]))
+		return  -ϵ * SVector( first(gradient(fx, r[1])),
+	                          first(gradient(fy, r[2])),
+	                          first(gradient(fz, r[3])))
+		#InteratomicPotentials.force(R, r, potential_lj)
 	end
 
 end
 
+# ╔═╡ a925af06-056c-4f39-8dab-57f96c7e009c
+force(norm(SVector(0.2, 0.1, 0.01)), SVector(0.2, 0.1, 0.01), potential_lj)
+
+# ╔═╡ ee7c20c9-7b8b-47a6-9ac1-fd2ef12e8358
+force(norm(SVector(0.2, 0.1, 0.01)), SVector(0.2, 0.1, 0.01), potential_lp)
+
 # ╔═╡ 1e471b6e-b697-4f0e-a058-a28076800976
-eq_result_lp, prod_result_lp = run_md(potential_lj)
+eq_result_lp, prod_result_lp = run_md(potential_lp)
 
 # ╔═╡ 5f78419e-3abe-4b17-a331-e40ed88c596c
 md"## Comparing results"
@@ -211,6 +226,7 @@ begin
 end
 
 # ╔═╡ Cell order:
+# ╟─a35fd14d-119a-4113-9dd8-9787d41195fc
 # ╟─36efeddd-2c74-4ce9-9f4d-b6b9b1a2a1c5
 # ╟─bc22c72b-1df4-427b-a8f9-5858e5a1c9f3
 # ╠═ecc74779-8044-4f7f-9a5f-ffd782311438
@@ -232,6 +248,8 @@ end
 # ╠═85725889-64fa-4535-af03-ef2435c61cbd
 # ╟─0c8426c2-95f6-4c33-b872-bfe83cec6d15
 # ╠═2e1a070e-fcd7-41c7-bacb-0e4ae2f212cc
+# ╠═a925af06-056c-4f39-8dab-57f96c7e009c
+# ╠═ee7c20c9-7b8b-47a6-9ac1-fd2ef12e8358
 # ╠═1e471b6e-b697-4f0e-a058-a28076800976
 # ╟─5f78419e-3abe-4b17-a331-e40ed88c596c
 # ╟─5e40f7ed-4070-4743-b8d7-a7f9404d82a4
