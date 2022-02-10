@@ -150,32 +150,108 @@ begin
 
 	function InteratomicPotentials.potential_energy(R::AbstractFloat, 
 		                                            p::LearnedPotential)
-		return ϵ * first(p.model([R]))
-		I#nteratomicPotentials.potential_energy(R, potential_lj)
+		#return ϵ * first(p.model([R]))
+		InteratomicPotentials.potential_energy(R, potential_lj)
 	end
-	
-	function InteratomicPotentials.force(R::AbstractFloat,
-		                                 r::SVector{3,<:AbstractFloat}, 
-		                                 p::LearnedPotential)
-		fx = x -> first(p.model([norm([x, r[2], r[3]])]))
-		fy = y -> first(p.model([norm([r[1], y, r[3]])]))
-		fz = z -> first(p.model([norm([r[1], r[2], z])]))
-		return  -ϵ * SVector( first(gradient(fx, r[1])),
-	                          first(gradient(fy, r[2])),
-	                          first(gradient(fz, r[3])))
-		#InteratomicPotentials.force(R, r, potential_lj)
-	end
-
 end
 
-# ╔═╡ a925af06-056c-4f39-8dab-57f96c7e009c
-force(norm(SVector(0.2, 0.1, 0.01)), SVector(0.2, 0.1, 0.01), potential_lj)
+# ╔═╡ 542f09a3-bb3e-44b1-afef-69f2cb64a7fa
+begin
+	function tocart(r, ϕ, θ)
+		rx = r * cos(θ) * sin(ϕ)
+		ry = r * sin(θ) * sin(ϕ)
+		rz = r * cos(ϕ)
+		return SVector(rx, ry, rz)
+	end
+	function force_(r)
+		# fx = x -> first(model([norm([x, r[2], r[3]])]))
+		# fy = y -> first(model([norm([r[1], y, r[3]])]))
+		# fz = z -> first(model([norm([r[1], r[2], z])]))
+		# return -ϵ * SVector(  first(gradient(fx, r[1])),
+		# 					  first(gradient(fy, r[2])),
+		# 					  first(gradient(fz, r[3])))
+		return force(norm(r), r, potential_lj)
+	end
+	r0=σ/2; r1=rcutoff; 
+	nr = 600; nϕ = 70; nθ = 140
+	Δr = (r1 - r0) / (nr - 1); Δϕ = π / (nϕ - 1); Δθ = 2π / (nθ - 1)
+	rs = r0:Δr:r1; ϕs = 0.0:Δϕ:π; θs = -π:Δθ:π
+	precomputed_forces = Array{Union{Missing, SVector}}(missing, nr, nϕ, nθ)
+	#precomputed_forces = [force_(tocart(r, ϕ, θ)) for r in rs, ϕ in ϕs, θ in θs]
+end
 
-# ╔═╡ ee7c20c9-7b8b-47a6-9ac1-fd2ef12e8358
-force(norm(SVector(0.2, 0.1, 0.01)), SVector(0.2, 0.1, 0.01), potential_lp)
+# ╔═╡ 5985cdf3-f8c9-4d2f-8403-fada817983c2
+function InteratomicPotentials.force(R::AbstractFloat,
+		                             r::SVector{3,<:AbstractFloat}, 
+		                             p::LearnedPotential)
+	    rr = sqrt(sum(r.^2))
+		θ = atan(r[2], r[1])
+		ϕ = acos(r[3]/rr)
+		i = trunc(Int, (rr - r0) / Δr + 1)
+		j = trunc(Int, ϕ / Δϕ + 1)
+		k = trunc(Int, (θ + π)  / Δθ + 1)
+
+		if i < 1
+			i = 1
+			rr = r0
+		elseif i > nr
+			i = nr
+			rr = r1
+		end
+
+		if isequal(precomputed_forces[i, j, k], missing)
+			precomputed_forces[i, j, k] = force_(tocart(rr, ϕ, θ))
+		end
+			
+		return precomputed_forces[i, j, k]
+end
+
+# ╔═╡ 9f875d26-9b0c-4c5e-bc6e-73b2fd3e4c33
+begin
+	rss = []; fs_model = []; fs_surr = []
+	for r in 2r0:Δr/10:r1
+		for _ in 1:30
+			ϕ = rand() * 2.0 * π; θ = rand() * π
+			x_ij = r * cos(ϕ) * sin(θ) 
+			y_ij = r * sin(ϕ) * sin(θ) 
+			z_ij = r * cos(θ)          
+			r_ij = SVector(x_ij, y_ij, z_ij)
+			push!(rss, r)
+			push!(fs_model, force(norm(r_ij), r_ij, potential_lp))
+			push!(fs_surr, force(norm(r_ij), r_ij, potential_lj))
+		end
+	end
+end
+
+# ╔═╡ 34c6c57e-d930-42ce-99eb-3d253cad8a05
+begin
+	plot(rss, norm.(fs_model), seriestype = :scatter, markerstrokewidth=0,
+		 xlabel = "Norm of the position difference, |ri-rj|", 
+	  	 ylabel = "Norm of the force", 
+		 label = "Force norm from precomputed matrix")
+	plot!(rss, norm.(fs_surr), seriestype = :scatter, markerstrokewidth=0,
+		  label = "LJ force norm")
+end
+
+# ╔═╡ ca1b7f43-042a-44f9-93b2-ea08cdfe9f41
+begin
+	px =plot( [f[1] for f in fs_surr], [f[1] for f in fs_model], 
+		      seriestype = :scatter, markerstrokewidth=0, label="",
+		      xlabel = "Fx, LJ", ylabel = "Fx, precomputed LJ")
+	py =plot( [f[2] for f in fs_surr], [f[2] for f in fs_model], 
+		      seriestype = :scatter, markerstrokewidth=0, label="",
+              xlabel = "Fy, LJ", ylabel = "Fy, precomputed LJ")
+    pz =plot( [f[3] for f in fs_surr], [f[3] for f in fs_model], 
+		      seriestype = :scatter, markerstrokewidth=0, label="",
+              xlabel = "Fz, LJ", ylabel = "Fz, precomputed LJ")
+	plot(px, py, pz)
+end
 
 # ╔═╡ 1e471b6e-b697-4f0e-a058-a28076800976
 eq_result_lp, prod_result_lp = run_md(potential_lp)
+
+# ╔═╡ 9a7ad367-15b0-4430-b24c-7ac656f296c0
+sum([ isequal(precomputed_forces[i, j, k], missing) for i in 1:nr, j in 1:nϕ, k in 1:nθ])
 
 # ╔═╡ 5f78419e-3abe-4b17-a331-e40ed88c596c
 md"## Comparing results"
@@ -185,13 +261,13 @@ md"Temperature"
 
 # ╔═╡ b1b35543-65df-4dde-b1f8-80660a0ce13c
 begin
-	temp_lj = @time plot_temperature(eq_result_lj, 10)
+	temp_lj = plot_temperature(eq_result_lj, 10)
 	plot_temperature!(temp_lj, prod_result_lj, 10)
 end
 
 # ╔═╡ 9431472f-2f13-40f2-8835-619be87d8848
 begin
-	temp_lp = @time plot_temperature(eq_result_lp, 10)
+	temp_lp = plot_temperature(eq_result_lp, 10)
 	plot_temperature!(temp_lp, prod_result_lp, 10)
 end
 
@@ -200,13 +276,13 @@ md"Energy"
 
 # ╔═╡ 4c9eb6bf-a2c0-4b38-952e-782e6e1b24af
 begin
-	energy_lj = @time plot_energy(eq_result_lj, 10)
+	energy_lj = plot_energy(eq_result_lj, 10)
 	plot_energy!(energy_lj, prod_result_lj, 10)
 end
 
 # ╔═╡ c0f4b3a7-cee6-4530-af14-3742e1c41baf
 begin
-	energy_lp = @time plot_energy(eq_result_lp, 10)
+	energy_lp = plot_energy(eq_result_lp, 10)
 	plot_energy!(energy_lp, prod_result_lp, 10)
 end
 
@@ -214,16 +290,10 @@ end
 md"Radial distribution function"
 
 # ╔═╡ 31b4e7fe-0807-4316-b628-a403a2d2c1cb
-begin
-	#rdf_lj = @time plot_rdf(prod_result_lj, potential.σ, Int(0.95 * prod_steps))
-	plot_rdf(prod_result_lj, potential_lj.σ, Int(0.95 * prod_steps))
-end
+plot_rdf(prod_result_lj, potential_lj.σ, Int(0.95 * prod_steps))
 
 # ╔═╡ 6db35db8-eac3-4dc0-aefe-c0701fc729ef
-begin
-	#rdf_lp = @time plot_rdf(prod_result_lp, potential.σ, Int(0.95 * prod_steps))
-	plot_rdf(prod_result_lp, potential_lj.σ, Int(0.95 * prod_steps))
-end
+plot_rdf(prod_result_lp, potential_lj.σ, Int(0.95 * prod_steps))
 
 # ╔═╡ Cell order:
 # ╟─a35fd14d-119a-4113-9dd8-9787d41195fc
@@ -248,9 +318,13 @@ end
 # ╠═85725889-64fa-4535-af03-ef2435c61cbd
 # ╟─0c8426c2-95f6-4c33-b872-bfe83cec6d15
 # ╠═2e1a070e-fcd7-41c7-bacb-0e4ae2f212cc
-# ╠═a925af06-056c-4f39-8dab-57f96c7e009c
-# ╠═ee7c20c9-7b8b-47a6-9ac1-fd2ef12e8358
+# ╠═542f09a3-bb3e-44b1-afef-69f2cb64a7fa
+# ╠═5985cdf3-f8c9-4d2f-8403-fada817983c2
+# ╠═9f875d26-9b0c-4c5e-bc6e-73b2fd3e4c33
+# ╠═34c6c57e-d930-42ce-99eb-3d253cad8a05
+# ╠═ca1b7f43-042a-44f9-93b2-ea08cdfe9f41
 # ╠═1e471b6e-b697-4f0e-a058-a28076800976
+# ╠═9a7ad367-15b0-4430-b24c-7ac656f296c0
 # ╟─5f78419e-3abe-4b17-a331-e40ed88c596c
 # ╟─5e40f7ed-4070-4743-b8d7-a7f9404d82a4
 # ╠═b1b35543-65df-4dde-b1f8-80660a0ce13c
