@@ -21,7 +21,7 @@ initial_system = systems[1]
 
 # Thermostat ###################################################################
 reference_temp = 800.0u"K"
-thermostat_prob = 0.5 # ?
+thermostat_prob = 0.1 # ?
 eq_thermostat = NBodySimulator.AndersenThermostat(
                                 austrip(reference_temp),
                                 thermostat_prob / austrip(Δt))
@@ -38,15 +38,11 @@ csp = 1.0
 rpi_params = RPIParams([:Hf, :O], n_body, max_deg, wL, csp, r0, rcutoff)
 potential = RPI(β, rpi_params)
 
-calc_B(systems) = vcat((evaluate_basis.(systems, [rpi_params])'...))
-
-calc_dB(systems) = vcat([vcat(d...) for d in ThreadsX.collect(evaluate_basis_d(s, rpi_params) for s in systems)]...)
-
 function InteratomicPotentials.energy_and_force(s::AbstractSystem, p::RPI)
-    B = calc_B([s])
-    dB = calc_dB([s])
-    e = (B * p.coefficients)[1]
-    f = [ SVector(dB[i:i+2,:] * p.coefficients...) for i in 1:3:size(dB,1)]
+    B = evaluate_basis(s, rpi_params)
+    dB = evaluate_basis_d(s, rpi_params)
+    e = B' * p.coefficients
+    f = [SVector(d * p.coefficients...) for d in dB]
     return (; e, f)
 end
 
