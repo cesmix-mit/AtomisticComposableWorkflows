@@ -87,7 +87,6 @@ function load_data(file; max_entries = 2000 )
             push!(systems, system)
             count += 1
         end
-        println(count)
     end
     return systems, energies, forces, stresses
 end
