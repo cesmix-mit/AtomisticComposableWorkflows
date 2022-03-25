@@ -9,15 +9,15 @@ using StatsBase
 using UnitfulAtomic
 using Unitful 
 using BenchmarkTools
-using ThreadsX #julia --threads 4
-
+#using ThreadsX #julia --threads 4
 
 include("load_data.jl")
 
-systems, energies, forces, stresses = load_data("HfO2_relax_1000.xyz")
+#systems, energies, forces, stresses = load_data("HfO2_relax_1000.xyz")
+systems, energies, forces, stresses = load_data("a-Hfo2-300K-NVT.extxyz")
 
 # Split into training, testing
-n_systems = 65 # length(systems)
+n_systems = 2000 #length(systems)
 n_train = floor(Int, n_systems * 0.8)
 n_test  = n_systems - n_train
 
@@ -31,10 +31,10 @@ test_systems, test_energies, test_forces, test_stress =
                              forces[test_index], stresses[test_index]
 
 # Create RPI Basis 
-n_body = 4
-max_deg = 7
-r0 = 1.0
-rcutoff = 15.0
+n_body = 5
+max_deg = 6
+r0 = 1.0 # ( rnn(:Hf) + rnn(:O) ) / 2.0 ?
+rcutoff = 5.0
 wL = 1.0
 csp = 1.0
 rpi_params = RPIParams([:Hf, :O], n_body, max_deg, wL, csp, r0, rcutoff)
@@ -42,13 +42,13 @@ rpi_params = RPIParams([:Hf, :O], n_body, max_deg, wL, csp, r0, rcutoff)
 # Define auxiliary functions to assemble the matrix A
 calc_B(systems) = vcat((evaluate_basis.(systems, [rpi_params])'...))
 calc_dB(systems) =
-    vcat([vcat(d...) for d in ThreadsX.collect(evaluate_basis_d(s, rpi_params) for s in systems)]...)
-    #vcat([vcat(d...) for d in evaluate_basis_d.(systems, [rpi_params])]...)
+    #vcat([vcat(d...) for d in ThreadsX.collect(evaluate_basis_d(s, rpi_params) for s in systems)]...)
+    vcat([vcat(d...) for d in evaluate_basis_d.(systems, [rpi_params])]...)
 calc_F(forces) = vcat([vcat(vcat(f...)...) for f in forces]...)
 
 # Calculate A matrix
-B = calc_B(train_systems)
-dB = calc_dB(train_systems)
+B = @time calc_B(train_systems)
+dB = @time calc_dB(train_systems)
 A = [B; dB]
 
 # Calculate b vector (energies and forces)
@@ -61,8 +61,18 @@ Q = Diagonal([0.5 .+ 0.0 * e; 90.0 .+ 0.0*f])
 β = (A'*Q*A) \ (A'*Q*b) 
 
 print(β)
+write("beta.dat", "$β")
 
 # Compute testing errors
+B = nothing
+dB = nothing
+A = nothing
+e = nothing
+f = nothing
+b = nothing
+Q = nothing
+GC.gc()
+
 B_test = calc_B(test_systems)
 dB_test = calc_dB(test_systems)
 e_test = test_energies
@@ -75,4 +85,5 @@ f_error = abs.(f_pred .- f_test) ./ abs.(f_test)
 println(mean(e_error), ", " , mean(f_error))
 
 
+write("error.dat", "$(e_pred), $(f_error)")
 

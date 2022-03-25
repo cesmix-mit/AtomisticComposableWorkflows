@@ -45,7 +45,7 @@ function load_data(file; max_entries = 2000 )
             properties = match(r"Properties=(.*?) ", line).captures[1]
             properties = split(properties, ":")
             properties = [properties[i:i+2] for i = 1:3:(length(properties)-1)]
-            atoms = Vector{Atom}(undef, num_atoms)
+            atoms = Vector{AtomsBase.Atom}(undef, num_atoms)
             force = Vector{SVector{3, Float64}}(undef, num_atoms) 
             for i = 1:num_atoms
                 line = split(readline(io))
@@ -78,7 +78,7 @@ function load_data(file; max_entries = 2000 )
                         end
                     end
                 end
-                atoms[i] = Atom(element, position * 1u"Å", data = data) 
+                atoms[i] = AtomsBase.Atom(element, position * 1u"Å", data = data) 
                  
             end
 

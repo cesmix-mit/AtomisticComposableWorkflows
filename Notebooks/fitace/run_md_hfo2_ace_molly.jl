@@ -1,10 +1,10 @@
 using LinearAlgebra
 using StaticArrays
-using AtomsBase
+#using AtomsBase
 using InteratomicPotentials 
 using InteratomicBasisPotentials
 using Atomistic
-using NBodySimulator
+using Molly
 using BenchmarkTools
 using ThreadsX #julia --threads 4
 using Plots
@@ -21,10 +21,8 @@ initial_system = systems[1]
 
 # Thermostat ###################################################################
 reference_temp = 800.0u"K"
-thermostat_prob = 0.1 # ?
-eq_thermostat = NBodySimulator.AndersenThermostat(
-                                austrip(reference_temp),
-                                thermostat_prob / austrip(Δt))
+coupling_factor = 10 # ?
+eq_thermostat = Molly.AndersenThermostat(reference_temp, Δt * coupling_factor)
 
 
 # Create potential #############################################################
@@ -49,13 +47,13 @@ end
 
 # First stage ##################################################################
 eq_steps = 50
-eq_simulator = NBSimulator(Δt, eq_steps, thermostat = eq_thermostat)
+eq_simulator = MollySimulator(Δt, eq_steps, coupling = eq_thermostat)
 eq_result = @time simulate(initial_system, eq_simulator, potential)
 
 
 # Second stage #################################################################
 prod_steps = 100
-prod_simulator = NBSimulator(Δt, prod_steps, t₀ = get_time(eq_result))
+prod_simulator = MollySimulator(Δt, prod_steps, t₀ = get_time(eq_result))
 prod_result = @time simulate(get_system(eq_result), prod_simulator, potential)
 
 
@@ -70,5 +68,5 @@ display(plot_energy!(energy, prod_result, 10))
 #display(rdf)
 #savefig(rdf, "hf02_ace_nbs_rdf.svg")
 
-animate(prod_result, "hfo2_ace_nbs.gif")
+visualize(ab_initio_result, "hfO2_ace_molly.mp4")
 
