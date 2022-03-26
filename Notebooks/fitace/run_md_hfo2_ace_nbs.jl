@@ -6,7 +6,7 @@ using InteratomicBasisPotentials
 using Atomistic
 using NBodySimulator
 using BenchmarkTools
-using ThreadsX #julia --threads 4
+#using ThreadsX #julia --threads 4
 using Plots
 
 include("load_data.jl")
@@ -16,15 +16,14 @@ include("load_data.jl")
 systems, energies, forces, stresses = load_data("a-Hfo2-300K-NVT.extxyz")
 N = length(systems[1])
 initial_system = systems[1]
-Δt = 2.5u"ps"
+Δt = 2.5 #2.5u"ps"
 
 
 # Thermostat ###################################################################
-reference_temp = 800.0u"K"
-thermostat_prob = 0.1 # ?
-eq_thermostat = NBodySimulator.AndersenThermostat(
-                                austrip(reference_temp),
-                                thermostat_prob / austrip(Δt))
+reference_temp = 300.0#u"K"
+ν = 0.01 / Δt # stochastic collision frequency
+#eq_thermostat = NBodySimulator.AndersenThermostat(austrip(reference_temp), austrip(ν))
+eq_thermostat = NBodySimulator.AndersenThermostat(reference_temp, ν)
 
 
 # Create potential #############################################################
@@ -48,14 +47,14 @@ end
 
 
 # First stage ##################################################################
-eq_steps = 50
+eq_steps = 100
 eq_simulator = NBSimulator(Δt, eq_steps, thermostat = eq_thermostat)
 eq_result = @time simulate(initial_system, eq_simulator, potential)
 
 
 # Second stage #################################################################
 prod_steps = 100
-prod_simulator = NBSimulator(Δt, prod_steps, t₀ = get_time(eq_result))
+prod_simulator = NBSimulator(Δt, prod_steps, t₀ = austrip(get_time(eq_result)))
 prod_result = @time simulate(get_system(eq_result), prod_simulator, potential)
 
 
@@ -63,12 +62,11 @@ prod_result = @time simulate(get_system(eq_result), prod_simulator, potential)
 temp = plot_temperature(eq_result, 10)
 energy = plot_energy(eq_result, 10)
 
-display(plot_temperature!(temp, prod_result, 10))
-display(plot_energy!(energy, prod_result, 10))
+savefig(plot_temperature!(temp, prod_result, 10), "temp_hfo2_ace_nbs.svg")
+savefig(plot_energy!(energy, prod_result, 10), "energy_hfo2_ace_nbs.svg")
 
-#rdf = plot_rdf(prod_result, austrip(2.0u"nm"), Int(0.95 * prod_steps))
-#display(rdf)
-#savefig(rdf, "hf02_ace_nbs_rdf.svg")
+rdf = plot_rdf(prod_result, 1.0, Int(0.95 * prod_steps))
+savefig(rdf, "rdf_hfo2_ace_nbs_rdf.svg")
 
 animate(prod_result, "hfo2_ace_nbs.gif")
 
