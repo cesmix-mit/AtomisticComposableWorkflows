@@ -20,7 +20,7 @@ for params in   'a-Hfo2-300K-NVT.extxyz 2000 2 3 1 5 1 1' \
                 'a-Hfo2-300K-NVT.extxyz 2000 5 6 1 5 1 1'
 do
     mkdir $path/$i; cd $path/$i;
-    nohup julia ../$juliafile $params;
+    nohup julia ../$juliafile $params &
     i=$((i+1))
 done
 
