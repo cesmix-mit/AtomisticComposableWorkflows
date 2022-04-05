@@ -1,12 +1,20 @@
-exp=experiments               # Experiment folder
-echo "dataset,e_max_rel_error,e_mean_rel_error,e_mean_abs_error,e_rmse,"\
-     "f_max_rel_error,f_mean_rel_error,f_mean_abs_error,f_rmse,"\
-     "n_systems,n_params,n_body,max_deg,r0,rcutoff,wL,csp,"\
-     "B_time,dB_time" >> hfo2-ace-results.csv
+# Result file
+results=hfo2-ace-results.csv
+# Experiment folder
+exp=experiments
 
+# Result header
+echo "dataset,"\
+     "e_train_rmse,e_train_mae,e_train_mre,e_train_maxre,"\
+     "f_train_rmse,f_train_mae,f_train_mre,f_train_maxre,"\
+     "e_test_rmse,e_test_mae,e_test_mre,e_test_maxre,"\
+     "f_test_rmse,f_test_mae,f_test_mre,f_test_maxre,"\
+     "n_systems,n_params,n_body,max_deg,r0,rcutoff,wL,csp,"\
+     "B_time,dB_time" >> $results
+# Gather results
 path=`pwd`
 for currpath in $path/$exp/*/ 
 do
-  cat $currpath/result.csv >> hfo2-ace-results.csv
-  echo "" >> hfo2-ace-results.csv
+  cat $currpath/result.csv >> $results
+  echo "" >> $results
 done

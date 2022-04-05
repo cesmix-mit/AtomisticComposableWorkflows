@@ -51,56 +51,62 @@ calc_dB(systems) =
 calc_F(forces) = vcat([vcat(vcat(f...)...) for f in forces]...)
 
 # Calculate A matrix ###########################################################
-B_time = @time @elapsed B = calc_B(train_systems)
-dB_time = @time @elapsed dB = calc_dB(train_systems)
+B_time = @time @elapsed B_train = calc_B(train_systems)
+dB_time = @time @elapsed dB_train = calc_dB(train_systems)
 
-A = [B; dB]
+A = [B_train; dB_train]
 
 write("A.dat", "$A")
 
 # Calculate b vector (energies and forces) #####################################
-e = train_energies
-f = calc_F(train_forces)
-b = [e; f]
+e_train = train_energies
+f_train = calc_F(train_forces)
+b_train = [e_train; f_train]
 
-write("b.dat", "$b")
+write("b.dat", "$(b_train)")
 
 # Calculate coefficients β #####################################################
 Q = Diagonal([0.5 .+ 0.0 * e; 90.0 .+ 0.0*f])
-β = (A'*Q*A) \ (A'*Q*b)
+β = (A'*Q*A) \ (A'*Q*b_train)
 
 write("beta.dat", "$β")
 
-# Compute testing errors #######################################################
+# Compute errors ##############################################################
 
-B = dB = A = e = f = b = Q = nothing; GC.gc()
+function compute_errors(x_pred, x)
+    x_rmse = sqrt(sum((x_pred .- x).^2) / length(x))
+    x_mae = mean(abs.(x_pred .- x) ./ length(x))
+    x_mre = mean(abs.((x_pred .- x) ./ x))
+    x_maxre = maximum(abs.((x_pred .- x) ./ x))
+    return x_rmse, x_mae, x_mre, x_maxre
+end
 
+# Compute training errors
+e_train_pred = B_train * β
+f_train_pred = dB_train * β
+e_train_rmse, e_train_mae, e_train_mre, e_train_maxre = compute_errors(e_train_pred, e_train)
+f_train_rmse, f_train_mae, f_train_mre, f_train_maxre = compute_errors(f_train_pred, f_train)
+
+# Compute test errors
+B_train = dB_train = A = b_train = Q = nothing; GC.gc()
 B_test = calc_B(test_systems)
 dB_test = calc_dB(test_systems)
 e_test = test_energies
 f_test = calc_F(test_forces)
+e_test_pred = B_test * β
+f_test_pred = dB_test * β
+e_test_rmse, e_test_mae, e_test_mre, e_test_maxre = compute_errors(e_test_pred, e_test)
+f_test_rmse, f_test_mae, f_test_mre, f_test_maxre = compute_errors(f_test_pred, f_test)
 
-e_pred = B_test * β
-f_pred = dB_test * β
 
-e_max_rel_error = maximum(abs.((e_pred .- e_test) ./ e_test))
-f_max_rel_error = maximum(abs.((f_pred .- f_test) ./ f_test))
-
-e_mean_rel_error = mean(abs.((e_pred .- e_test) ./ e_test))
-f_mean_rel_error = mean(abs.((f_pred .- f_test) ./ f_test))
-
-e_mean_abs_error = mean(abs.(e_pred .- e_test) ./ length(e_test))
-f_mean_abs_error = mean(abs.(f_pred .- f_test) ./ length(f_test))
-
-e_rmse = sqrt(sum((e_pred .- e_test).^2) / length(e_test))
-f_rmse = sqrt(sum((f_pred .- f_test).^2) / length(f_test))
-
+# Save results #################################################################
 write("result.dat", "$(filename), \
-                     $(e_max_rel_error), $(e_mean_rel_error), $(e_mean_abs_error), $(e_rmse), \
-                     $(f_max_rel_error), $(f_mean_rel_error), $(f_mean_abs_error), $(f_rmse), \
-                     $(n_systems), $(length(β)), \
-                     $(n_body), $(max_deg), $(r0), $(rcutoff), $(wL), $(csp), \
-                     $(B_time), $(dB_time)")
+                     $(n_systems),$(n_params,$(n_body,$(max_deg,$(r0,$(rcutoff),$(wL),$(csp),\
+                     $(e_train_rmse),$(e_train_mae),$(e_train_mre),$(e_train_maxre),\
+                     $(f_train_rmse),$(f_train_mae),$(f_train_mre),$(f_train_maxre),\
+                     $(e_test_rmse),$(e_test_mae),$(e_test_mre),$(e_test_maxre),\
+                     $(f_test_rmse),$(f_test_mae),$(f_test_mre),$(f_test_maxre),\
+                     $(B_time),$(dB_time)")
 
 
 
