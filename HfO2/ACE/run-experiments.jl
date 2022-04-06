@@ -38,12 +38,10 @@ csp = 0.5:0.5:1.5
 # Experiment parameters: dataset n_systems n_body max_deg r0 rcutoff wL csp
 run(`mkdir $experiments`)
 for params in product(dataset, n_systems, n_body, max_deg, r0, rcutoff, wL, csp)
-    print("Launching experiment: $params")
+    print("Launching experiment: $params\n")
     currexp = reduce(*,map(s->"$s"*"-", params))[1:end-1]
     run(`mkdir $experiments/$currexp`)
-    cd("$experiments/$currexp")
-    run(`nohup julia ../../$juliafile $params '&'`)
-    cd("../../")
+    @async run(Cmd(`nohup julia ../../$juliafile $params`, dir="$experiments/$currexp"));
 end
 
-print("Run ./gather-results.sh after all the experiments are finished.")
+print("Run ./gather-results.sh after all the experiments are finished.\n")

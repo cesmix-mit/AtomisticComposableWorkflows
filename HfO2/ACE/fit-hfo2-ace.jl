@@ -15,8 +15,8 @@ include("load_data.jl")
 
 # Load training and test datasets ##############################################
 
-filename = ARGS[1] # "a-Hfo2-300K-NVT.extxyz" # "data/HfO2_relax_1000.xyz"
-systems, energies, forces, stresses = load_data("../data/"*filename)
+filename = ARGS[1]
+systems, energies, forces, stresses = load_data("../../data/"*filename)
 
 # Split into training, testing
 n_systems = parse(Int64, ARGS[2]) # length(systems)
