@@ -11,14 +11,14 @@ juliafile = "fit-hfo2-ace.jl"
 # dataset
 dataset = ["a-Hfo2-300K-NVT.extxyz"]
 # n_systems: number of atomic configurations
-n_systems = [2000]
+n_systems = 2000:2000
 # n_body: body order. N: correlation order (N = n_body - 1)
 n_body = 2:5
 # max_deg: maximum polynomial degree
 max_deg = 3:6 
 # r0: An estimate on the nearest-neighbour distance for scaling, JuLIP.rnn() 
 #     function returns element specific earest-neighbour distance
-r0 = [1] # ( rnn(:Hf) + rnn(:O) ) / 2.0 ?
+r0 = 1:1 # ( rnn(:Hf) + rnn(:O) ) / 2.0 ?
 # rin: inner cutoff radius. Default: rin = 0.65*r0
 # rcutoff or rcut: outer cutoff radius
 rcutoff = 4:7
