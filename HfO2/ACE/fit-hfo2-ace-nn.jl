@@ -23,7 +23,7 @@ filename = "a-Hfo2-300K-NVT.extxyz" # ARGS[1]
 systems, energies, forces, stresses = load_data("data/"*filename)
 
 # Split into training, testing
-n_systems = 100 #parse(Int64, ARGS[2]) # length(systems)
+n_systems = 1000 #parse(Int64, ARGS[2]) # length(systems)
 n_train = floor(Int, n_systems * 0.8)
 n_test  = n_systems - n_train
 
@@ -73,7 +73,7 @@ f_train = vcat([vcat(vcat(f...)...) for f in train_forces]...)
 # Calculate neural network parameters ##########################################
 
 train_loader = DataLoader(([B_train; dB_train] , [e_train; f_train]),
-                            batchsize=256, shuffle=true)
+                            batchsize=128, shuffle=true)
 
 n_desc = size(B_train[1], 1)
 model = Chain(Dense(n_desc,100,Flux.relu),Dense(100,1))
@@ -87,7 +87,7 @@ global_loss(loader) =
        sum([loss(nn.(d), b) for (d, b) in loader]) / length(loader)
 
 opt = ADAM(0.0001)
-epochs = 500
+epochs = 10
 for epoch in 1:epochs
     # Training of one epoch
     time = Base.@elapsed for (d, b) in train_loader
