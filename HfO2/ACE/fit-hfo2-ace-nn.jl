@@ -8,19 +8,25 @@ using Statistics
 using StatsBase
 using UnitfulAtomic
 using Unitful 
+using Flux
+using Flux.Data: DataLoader
+using BSON: @save
+using CUDA
 using BenchmarkTools
-#using ThreadsX #julia --threads 4
 
 include("load_data.jl")
 
 # Load training and test datasets ##############################################
-filename = ARGS[1]
-systems, energies, forces, stresses = load_data("../../data/"*filename)
+
+filename = "a-Hfo2-300K-NVT.extxyz" # ARGS[1]
+#systems, energies, forces, stresses = load_data("../../data/"*filename)
+systems, energies, forces, stresses = load_data("data/"*filename)
 
 # Split into training, testing
-n_systems = parse(Int64, ARGS[2]) # length(systems)
+n_systems = 100 #parse(Int64, ARGS[2]) # length(systems)
 n_train = floor(Int, n_systems * 0.8)
 n_test  = n_systems - n_train
+
 rand_list = randperm(n_systems)
 train_index, test_index = rand_list[1:n_train], rand_list[n_train+1:n_systems]
 train_systems, train_energies, train_forces, train_stress =
@@ -31,40 +37,70 @@ test_systems, test_energies, test_forces, test_stress =
                              forces[test_index], stresses[test_index]
 
 # Create RPI Basis #############################################################
-n_body = parse(Int64, ARGS[3])
-max_deg = parse(Int64, ARGS[4])
-r0 = parse(Float64, ARGS[5])
-rcutoff = parse(Float64, ARGS[6])
-wL = parse(Float64, ARGS[7])
-csp = parse(Float64, ARGS[8])
+
+#n_body = parse(Int64, ARGS[3])
+#max_deg = parse(Int64, ARGS[4])
+#r0 = parse(Float64, ARGS[5])
+#rcutoff = parse(Float64, ARGS[6])
+#wL = parse(Float64, ARGS[7])
+#csp = parse(Float64, ARGS[8])
+n_body = 2
+max_deg = 3
+r0 = 1
+rcutoff = 5
+wL = 1
+csp = 1
 rpi_params = RPIParams([:Hf, :O], n_body, max_deg, wL, csp, r0, rcutoff)
 
-# Define auxiliary functions to assemble the matrix A
-calc_B(systems) = vcat((evaluate_basis.(systems, [rpi_params])'...))
-calc_dB(systems) =
-    #vcat([vcat(d...) for d in ThreadsX.collect(evaluate_basis_d(s, rpi_params) for s in systems)]...)
-    vcat([vcat(d...) for d in evaluate_basis_d.(systems, [rpi_params])]...)
+# Calculate descriptors ########################################################
 
-calc_F(forces) = vcat([vcat(vcat(f...)...) for f in forces]...)
+calc_B(sys) = evaluate_basis.(sys, [rpi_params])
+calc_dB(sys) = [ dBs_comp for dBs_sys in evaluate_basis_d.(sys, [rpi_params])
+                          for dBs_atom in dBs_sys
+                          for dBs_comp in eachrow(dBs_atom)]
 
-# Calculate A matrix ###########################################################
 B_time = @time @elapsed B_train = calc_B(train_systems)
 dB_time = @time @elapsed dB_train = calc_dB(train_systems)
-A = [B_train; dB_train]
-write("A.dat", "$A")
+#write("B_train.dat", "$(B_train)")
+#write("dB_train.dat", "$(dB_train)")
 
-# Calculate b vector (energies and forces) #####################################
+# Calculate train energies and forces) #########################################
 e_train = train_energies
-f_train = calc_F(train_forces)
-b_train = [e_train; f_train]
-write("b.dat", "$(b_train)")
+f_train = vcat([vcat(vcat(f...)...) for f in train_forces]...)
+#write("e_train.dat", "$(e_train)")
+#write("f_train.dat", "$(f_train)")
 
-# Calculate coefficients β #####################################################
-Q = Diagonal([0.5 .+ 0.0 * e; 90.0 .+ 0.0*f])
-β = (A'*Q*A) \ (A'*Q*b_train)
-write("beta.dat", "$β")
+# Calculate neural network parameters ##########################################
+
+train_loader = DataLoader(([B_train; dB_train] , [e_train; f_train]),
+                            batchsize=256, shuffle=true)
+
+n_desc = size(B_train[1], 1)
+model = Chain(Dense(n_desc,100,Flux.relu),Dense(100,1))
+nn(d) = sum(model(d))
+ps = Flux.params(model)
+n_params = sum(length, Flux.params(model))
+
+loss(b_pred, b) = sqrt(sum((b_pred .- b).^2) / length(b))
+
+global_loss(loader) =
+       sum([loss(nn.(d), b) for (d, b) in loader]) / length(loader)
+
+opt = ADAM(0.0001)
+epochs = 500
+for epoch in 1:epochs
+    # Training of one epoch
+    time = Base.@elapsed for (d, b) in train_loader
+        gs = gradient(() -> loss(nn.(d), b), ps)
+        Flux.Optimise.update!(opt, ps, gs)
+    end
+    # Report traning loss
+    println("Epoch: $(epoch), loss: $(global_loss(train_loader)), time: $(time)")
+end
+
 
 # Compute errors ##############################################################
+
 function compute_errors(x_pred, x)
     x_rmse = sqrt(sum((x_pred .- x).^2) / length(x))
     x_mae = mean(abs.(x_pred .- x) ./ length(x))
@@ -74,23 +110,23 @@ function compute_errors(x_pred, x)
 end
 
 # Compute training errors
-e_train_pred = B_train * β
-f_train_pred = dB_train * β
+e_train_pred = nn.(B_train)
+f_train_pred = nn.(dB_train)
 e_train_rmse, e_train_mae, e_train_mre, e_train_maxre = compute_errors(e_train_pred, e_train)
 f_train_rmse, f_train_mae, f_train_mre, f_train_maxre = compute_errors(f_train_pred, f_train)
 
 # Compute test errors
-B_train = dB_train = A = b_train = Q = nothing; GC.gc()
 B_test = calc_B(test_systems)
 dB_test = calc_dB(test_systems)
 e_test = test_energies
-f_test = calc_F(test_forces)
-e_test_pred = B_test * β
-f_test_pred = dB_test * β
+f_test = vcat([vcat(vcat(f...)...) for f in test_forces]...)
+e_test_pred = nn.(B_test)
+f_test_pred = nn.(dB_test)
 e_test_rmse, e_test_mae, e_test_mre, e_test_maxre = compute_errors(e_test_pred, e_test)
 f_test_rmse, f_test_mae, f_test_mre, f_test_maxre = compute_errors(f_test_pred, f_test)
 
-# Save results #################################################################
+
+## Save results #################################################################
 write("results.csv", "$(filename), \
                       $(n_systems),$(n_params),$(n_body),$(max_deg),$(r0),$(rcutoff),$(wL),$(csp),\
                       $(e_train_rmse),$(e_train_mae),$(e_train_mre),$(e_train_maxre),\
