@@ -11,6 +11,8 @@ using Plots
 
 include("load_data.jl")
 
+experiment_path = "md-ahfo2-ace-molly/"
+run(`mkdir -p $experiment_path`)
 
 # System #######################################################################
 systems, energies, forces, stresses = load_data("a-Hfo2-300K-NVT.extxyz")

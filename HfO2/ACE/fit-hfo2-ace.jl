@@ -13,19 +13,24 @@ using BenchmarkTools
 include("load_data.jl")
 
 
-# Input: dataset_path, dataset_file, n_body, max_deg, r0, rcutoff, wL, csp
+# Input: experiment_path, dataset_path, dataset_file, n_body, max_deg, r0, rcutoff, wL, csp
 if size(ARGS, 1) == 0
-    ARGS = ["data/", "a-Hfo2-300K-NVT.extxyz", "1000", "2", "3", "1", "5", "1", "1"]
+    input = ["fit-ahfo2-ace/", "data/", "a-Hfo2-300K-NVT.extxyz",
+             "1000", "2", "3", "1", "5", "1", "1"]
+else
+    input = ARGS
 end
 
+experiment_path = input[1]
+run(`mkdir -p $experiment_path`)
 
 # Load training and test datasets ##############################################
-dataset_path = ARGS[1]
-dataset_filename = ARGS[2]
+dataset_path = input[2]
+dataset_filename = input[3]
 systems, energies, forces, stresses = load_data(dataset_path*dataset_filename)
 
 # Split into training, testing
-n_systems = parse(Int64, ARGS[3]) # length(systems)
+n_systems = parse(Int64, input[4]) # length(systems)
 n_train = floor(Int, n_systems * 0.8)
 n_test  = n_systems - n_train
 rand_list = randperm(n_systems)
@@ -39,12 +44,12 @@ test_systems, test_energies, test_forces, test_stress =
 
 
 # Create RPI Basis #############################################################
-n_body = parse(Int64, ARGS[4])
-max_deg = parse(Int64, ARGS[5])
-r0 = parse(Float64, ARGS[6])
-rcutoff = parse(Float64, ARGS[7])
-wL = parse(Float64, ARGS[8])
-csp = parse(Float64, ARGS[9])
+n_body = parse(Int64, input[5])
+max_deg = parse(Int64, input[6])
+r0 = parse(Float64, input[7])
+rcutoff = parse(Float64, input[8])
+wL = parse(Float64, input[9])
+csp = parse(Float64, input[10])
 rpi_params = RPIParams([:Hf, :O], n_body, max_deg, wL, csp, r0, rcutoff)
 
 
@@ -60,21 +65,21 @@ calc_F(forces) = vcat([vcat(vcat(f...)...) for f in forces]...)
 B_time = @time @elapsed B_train = calc_B(train_systems)
 dB_time = @time @elapsed dB_train = calc_dB(train_systems)
 A = [B_train; dB_train]
-write("A.dat", "$A")
+write(experiment_path*"A.dat", "$A")
 
 
 # Calculate b vector (energies and forces) #####################################
 e_train = train_energies
 f_train = calc_F(train_forces)
 b_train = [e_train; f_train]
-write("b.dat", "$(b_train)")
+write(experiment_path*"b.dat", "$(b_train)")
 
 
 # Calculate coefficients β #####################################################
 Q = Diagonal([0.5 .+ 0.0 * e_train; 90.0 .+ 0.0*f_train])
 β = (A'*Q*A) \ (A'*Q*b_train)
 n_params = size(β,1)
-write("beta.dat", "$β")
+write(experiment_path*"beta.dat", "$β")
 
 
 # Compute errors ##############################################################
@@ -105,14 +110,14 @@ f_test_rmse, f_test_mae, f_test_mre, f_test_maxre = compute_errors(f_test_pred, 
 
 
 # Save results #################################################################
-write("results.csv", "dataset,\
+write(experiment_path*"results.csv", "dataset,\
                       n_systems,n_params,n_body,max_deg,r0,rcutoff,wL,csp,\
                       e_train_rmse,e_train_mae,e_train_mre,e_train_maxre,\
                       f_train_rmse,f_train_mae,f_train_mre,f_train_maxre,\
                       e_test_rmse,e_test_mae,e_test_mre,e_test_maxre,\
                       f_test_rmse,f_test_mae,f_test_mre,f_test_maxre,\
                       B_time,dB_time
-                      $(filename), \
+                      $(dataset_filename), \
                       $(n_systems),$(n_params),$(n_body),$(max_deg),$(r0),$(rcutoff),$(wL),$(csp),\
                       $(e_train_rmse),$(e_train_mae),$(e_train_mre),$(e_train_maxre),\
                       $(f_train_rmse),$(f_train_mae),$(f_train_mre),$(f_train_maxre),\

@@ -6,11 +6,12 @@ using InteratomicBasisPotentials
 using Atomistic
 using NBodySimulator
 using BenchmarkTools
-#using ThreadsX #julia --threads 4
 using Plots
 
 include("load_data.jl")
 
+experiment_path = "md-ahfo2-ace-nbs/"
+run(`mkdir -p $experiment_path`)
 
 # System #######################################################################
 systems, energies, forces, stresses = load_data("data/a-Hfo2-300K-NVT.extxyz")
@@ -33,9 +34,9 @@ r0 = 1
 rcutoff = 5
 wL = 1
 csp = 1
-β = [-1070.3349953499962, -414.80248420688645, -71.86787965958288, -82.50976688678328,
-     -13.689747506835308, -40.72945576866673, -1.3835599761720792, -27.793686953761107,
-      10.48034807957747, 275.7704248933768, 132.03456243001267, 43.911546111453454]
+β = [-1072.1312864239615, -415.4169141829893, -71.953485409436, 1958.9574772187705,
+     -281.6558117872044, 630.2363590775907, -2041.0185474208306, 240.9014951656523,
+     -660.3623178315258, 267.9793847831617, 129.99873251077383, 43.761861053870035]
 rpi_params = RPIParams([:Hf, :O], n_body, max_deg, wL, csp, r0, rcutoff)
 potential = RPI(β, rpi_params)
 
@@ -64,11 +65,11 @@ prod_result = @time simulate(get_system(eq_result), prod_simulator, potential)
 temp = plot_temperature(eq_result, 10)
 energy = plot_energy(eq_result, 10)
 
-savefig(plot_temperature!(temp, prod_result, 10), "temp_hfo2_ace_nbs.svg")
-savefig(plot_energy!(energy, prod_result, 10), "energy_hfo2_ace_nbs.svg")
+savefig(plot_temperature!(temp, prod_result, 10), experiment_path*"temp_hfo2_ace_nbs.svg")
+savefig(plot_energy!(energy, prod_result, 10), experiment_path*"energy_hfo2_ace_nbs.svg")
 
 rdf = plot_rdf(prod_result, 1.0, Int(0.95 * prod_steps))
-savefig(rdf, "rdf_hfo2_ace_nbs_rdf.svg")
+savefig(rdf, experiment_path*"rdf_hfo2_ace_nbs_rdf.svg")
 
-animate(prod_result, "hfo2_ace_nbs.gif")
+animate(prod_result, experiment_path*"hfo2_ace_nbs.gif")
 

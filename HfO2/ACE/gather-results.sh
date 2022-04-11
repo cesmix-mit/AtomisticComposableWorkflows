@@ -1,5 +1,5 @@
 # Result file
-results=hfo2-ace-results.csv
+results=results.csv
 # Experiment folder
 exp=experiments
 
@@ -10,13 +10,13 @@ echo "dataset,"\
      "f_train_rmse,f_train_mae,f_train_mre,f_train_maxre," \
      "e_test_rmse,e_test_mae,e_test_mre,e_test_maxre," \
      "f_test_rmse,f_test_mae,f_test_mre,f_test_maxre,"\
-     "B_time,dB_time" >> $results
+     "B_time,dB_time" >> $exp/$results
 
 # Gather results
 path=`pwd`
 for currpath in $path/$exp/*/ 
 do
-  cat $currpath/results.csv >> $results
-  echo "" >> $results
+  tail -n 1 $currpath/results.csv >> $exp/$results
+  echo "" >> $exp/$results
 done
 
