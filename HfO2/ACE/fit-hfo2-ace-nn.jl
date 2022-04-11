@@ -16,14 +16,19 @@ using BenchmarkTools
 
 include("load_data.jl")
 
-# Load training and test datasets ##############################################
 
-filename = "a-Hfo2-300K-NVT.extxyz" # ARGS[1]
-#systems, energies, forces, stresses = load_data("../../data/"*filename)
-systems, energies, forces, stresses = load_data("data/"*filename)
+# Input: dataset_path, dataset_filename, n_body, max_deg, r0, rcutoff, wL, csp
+ARGS = ["data/", "a-Hfo2-300K-NVT.extxyz", "1000", "2", "3", "1", "5", "1", "1"]
+
+
+# Load training and test datasets ##############################################
+dataset_path = ARGS[1]
+dataset_filename = ARGS[2]
+systems, energies, forces, stresses = load_data(dataset_path*dataset_filename)
+
 
 # Split into training, testing
-n_systems = 1000 #parse(Int64, ARGS[2]) # length(systems)
+n_systems = parse(Int64, ARGS[3]) # length(systems)
 n_train = floor(Int, n_systems * 0.8)
 n_test  = n_systems - n_train
 
@@ -36,33 +41,27 @@ test_systems, test_energies, test_forces, test_stress =
                              systems[test_index], energies[test_index],
                              forces[test_index], stresses[test_index]
 
-# Create RPI Basis #############################################################
 
-#n_body = parse(Int64, ARGS[3])
-#max_deg = parse(Int64, ARGS[4])
-#r0 = parse(Float64, ARGS[5])
-#rcutoff = parse(Float64, ARGS[6])
-#wL = parse(Float64, ARGS[7])
-#csp = parse(Float64, ARGS[8])
-n_body = 2
-max_deg = 3
-r0 = 1
-rcutoff = 5
-wL = 1
-csp = 1
+# Create RPI Basis #############################################################
+n_body = parse(Int64, ARGS[4])
+max_deg = parse(Int64, ARGS[5])
+r0 = parse(Float64, ARGS[6])
+rcutoff = parse(Float64, ARGS[7])
+wL = parse(Float64, ARGS[8])
+csp = parse(Float64, ARGS[9])
 rpi_params = RPIParams([:Hf, :O], n_body, max_deg, wL, csp, r0, rcutoff)
 
-# Calculate descriptors ########################################################
 
+# Calculate descriptors ########################################################
 calc_B(sys) = evaluate_basis.(sys, [rpi_params])
 calc_dB(sys) = [ dBs_comp for dBs_sys in evaluate_basis_d.(sys, [rpi_params])
                           for dBs_atom in dBs_sys
                           for dBs_comp in eachrow(dBs_atom)]
-
 B_time = @time @elapsed B_train = calc_B(train_systems)
 dB_time = @time @elapsed dB_train = calc_dB(train_systems)
 #write("B_train.dat", "$(B_train)")
 #write("dB_train.dat", "$(dB_train)")
+
 
 # Calculate train energies and forces) #########################################
 e_train = train_energies
@@ -70,24 +69,20 @@ f_train = vcat([vcat(vcat(f...)...) for f in train_forces]...)
 #write("e_train.dat", "$(e_train)")
 #write("f_train.dat", "$(f_train)")
 
-# Calculate neural network parameters ##########################################
 
+# Calculate neural network parameters ##########################################
 train_loader = DataLoader(([B_train; dB_train] , [e_train; f_train]),
                             batchsize=128, shuffle=true)
-
 n_desc = size(B_train[1], 1)
 model = Chain(Dense(n_desc,100,Flux.relu),Dense(100,1))
 nn(d) = sum(model(d))
 ps = Flux.params(model)
 n_params = sum(length, Flux.params(model))
-
-loss(b_pred, b) = sqrt(sum((b_pred .- b).^2) / length(b))
-
+loss(b_pred, b) = mean(abs.((b_pred .- b) ./ b))
 global_loss(loader) =
-       sum([loss(nn.(d), b) for (d, b) in loader]) / length(loader)
-
+    sum([loss(nn.(d), b) for (d, b) in loader]) / length(loader)
 opt = ADAM(0.0001)
-epochs = 10
+epochs = 5
 for epoch in 1:epochs
     # Training of one epoch
     time = Base.@elapsed for (d, b) in train_loader
@@ -100,7 +95,6 @@ end
 
 
 # Compute errors ##############################################################
-
 function compute_errors(x_pred, x)
     x_rmse = sqrt(sum((x_pred .- x).^2) / length(x))
     x_mae = mean(abs.(x_pred .- x) ./ length(x))
@@ -127,7 +121,14 @@ f_test_rmse, f_test_mae, f_test_mre, f_test_maxre = compute_errors(f_test_pred, 
 
 
 ## Save results #################################################################
-write("results.csv", "$(filename), \
+write("results-nn.csv", "dataset,\
+                      n_systems,n_params,n_body,max_deg,r0,rcutoff,wL,csp,\
+                      e_train_rmse,e_train_mae,e_train_mre,e_train_maxre,\
+                      f_train_rmse,f_train_mae,f_train_mre,f_train_maxre,\
+                      e_test_rmse,e_test_mae,e_test_mre,e_test_maxre,\
+                      f_test_rmse,f_test_mae,f_test_mre,f_test_maxre,\
+                      B_time,dB_time
+                      $(dataset_filename), \
                       $(n_systems),$(n_params),$(n_body),$(max_deg),$(r0),$(rcutoff),$(wL),$(csp),\
                       $(e_train_rmse),$(e_train_mae),$(e_train_mre),$(e_train_maxre),\
                       $(f_train_rmse),$(f_train_mae),$(f_train_mre),$(f_train_maxre),\

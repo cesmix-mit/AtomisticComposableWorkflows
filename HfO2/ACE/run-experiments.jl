@@ -8,8 +8,10 @@ juliafile = "fit-hfo2-ace.jl"
 
 # Parameter definition and ranges ##############################################
 
-# dataset
-dataset = ["a-Hfo2-300K-NVT.extxyz"]
+# dataset path
+dataset_path = ["../../data/"]
+# dataset file
+dataset_file = ["a-Hfo2-300K-NVT.extxyz"]
 # n_systems: number of atomic configurations
 n_systems = 2000:2000
 # n_body: body order. N: correlation order (N = n_body - 1)
@@ -37,7 +39,8 @@ csp = 0.5:0.5:1.5
 
 # Experiment parameters: dataset n_systems n_body max_deg r0 rcutoff wL csp
 run(`mkdir $experiments`)
-for params in product(dataset, n_systems, n_body, max_deg, r0, rcutoff, wL, csp)
+for params in product(dataset_path, dataset_file, n_systems, n_body, max_deg,
+                      r0, rcutoff, wL, csp)
     print("Launching experiment: $params\n")
     currexp = reduce(*,map(s->"$s"*"-", params))[1:end-1]
     run(`mkdir $experiments/$currexp`)
