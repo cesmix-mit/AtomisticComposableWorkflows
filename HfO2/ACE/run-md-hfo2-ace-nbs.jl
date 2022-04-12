@@ -17,14 +17,13 @@ run(`mkdir -p $experiment_path`)
 systems, energies, forces, stresses = load_data("data/a-Hfo2-300K-NVT.extxyz")
 N = length(systems[1])
 initial_system = systems[1]
-Δt = 2.5 #2.5u"ps"
+Δt = 2.5u"fs"
 
 
 # Thermostat ###################################################################
-reference_temp = 300.0#u"K"
-ν = 0.0001 / Δt # stochastic collision frequency
-#eq_thermostat = NBodySimulator.AndersenThermostat(austrip(reference_temp), austrip(ν))
-eq_thermostat = NBodySimulator.AndersenThermostat(reference_temp, ν)
+reference_temp = 300.0u"K"
+ν = 1.0 / Δt # stochastic collision frequency
+eq_thermostat = NBodySimulator.AndersenThermostat(austrip(reference_temp), austrip(ν))
 
 
 # Create potential #############################################################
@@ -43,8 +42,8 @@ potential = RPI(β, rpi_params)
 function InteratomicPotentials.energy_and_force(s::AbstractSystem, p::RPI)
     B = evaluate_basis(s, rpi_params)
     dB = evaluate_basis_d(s, rpi_params)
-    e = B' * p.coefficients
-    f = [SVector(d * p.coefficients...) for d in dB]
+    e = austrip.(B' * p.coefficients * 1u"eV")
+    f = [SVector(austrip.(d * p.coefficients .* 1u"eV/Å")...) for d in dB]
     return (; e, f)
 end
 
@@ -56,20 +55,28 @@ eq_result = @time simulate(initial_system, eq_simulator, potential)
 
 
 # Second stage #################################################################
-prod_steps = 100
-prod_simulator = NBSimulator(Δt, prod_steps, t₀ = austrip(get_time(eq_result)))
-prod_result = @time simulate(get_system(eq_result), prod_simulator, potential)
+#prod_steps = 100
+#prod_simulator = NBSimulator(Δt, prod_steps, t₀ = get_time(eq_result))
+#prod_result = @time simulate(get_system(eq_result), prod_simulator, potential)
 
 
 # Results ######################################################################
-temp = plot_temperature(eq_result, 10)
-energy = plot_energy(eq_result, 10)
 
-savefig(plot_temperature!(temp, prod_result, 10), experiment_path*"temp_hfo2_ace_nbs.svg")
-savefig(plot_energy!(energy, prod_result, 10), experiment_path*"energy_hfo2_ace_nbs.svg")
+savefig(plot_temperature(eq_result, 10),
+        experiment_path*"temp_hfo2_ace_nbs.svg")
+savefig(plot_energy(eq_result, 10),
+        experiment_path*"energy_hfo2_ace_nbs.svg")
+savefig(plot_rdf(eq_result, 1.0, Int(0.95 * eq_steps)),
+        experiment_path*"rdf_hfo2_ace_nbs_rdf.svg")
+animate(eq_result, experiment_path*"hfo2_ace_nbs.gif")
 
-rdf = plot_rdf(prod_result, 1.0, Int(0.95 * prod_steps))
-savefig(rdf, experiment_path*"rdf_hfo2_ace_nbs_rdf.svg")
-
-animate(prod_result, experiment_path*"hfo2_ace_nbs.gif")
+#temp = plot_temperature(eq_result, 10)
+#energy = plot_energy(eq_result, 10)
+#savefig(plot_temperature!(temp, prod_result, 10),
+#        experiment_path*"temp_hfo2_ace_nbs.svg")
+#savefig(plot_energy!(energy, prod_result, 10),
+#        experiment_path*"energy_hfo2_ace_nbs.svg")
+#savefig(plot_rdf(prod_result, 1.0, Int(0.95 * prod_steps)),
+#        experiment_path*"rdf_hfo2_ace_nbs_rdf.svg")
+#animate(prod_result, experiment_path*"hfo2_ace_nbs.gif")
 

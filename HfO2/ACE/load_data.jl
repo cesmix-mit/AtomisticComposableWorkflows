@@ -14,8 +14,8 @@ function load_data(file; max_entries = 2000 )
             lattice_line = match(r"Lattice=\"(.*?)\" ", line).captures[1]
             lattice = parse.(Float64, split(lattice_line)) * 1u"Å"
             box = [lattice[1:3],
-                        lattice[4:6], 
-                        lattice[7:9]]
+                   lattice[4:6], 
+                   lattice[7:9]]
             bias = -5.0 
             try 
                 energy_line = match(r"energy=(.*?) ", line).captures[1]
@@ -77,8 +77,7 @@ function load_data(file; max_entries = 2000 )
                         end
                     end
                 end
-                atoms[i] = AtomsBase.Atom(element, position * 1u"Å", data = data) 
-
+                atoms[i] = AtomsBase.Atom(element, position .* 1u"Å", data = data)
             end
 
             push!(forces, force)
