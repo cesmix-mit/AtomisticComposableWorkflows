@@ -13,6 +13,7 @@ using Flux.Data: DataLoader
 using BSON: @save
 using CUDA
 using BenchmarkTools
+using Plots
 
 include("load_data.jl")
 
@@ -76,18 +77,22 @@ write(experiment_path*"f_train.dat", "$(f_train)")
 
 
 # Calculate neural network parameters ##########################################
-train_loader = DataLoader(([B_train; dB_train] , [e_train; f_train]),
-                            batchsize=128, shuffle=true)
+e_ref = maximum(e_train); f_ref = maximum(abs.(f_train))
+train_loader = DataLoader(([B_train; dB_train], 
+                           [e_train / e_ref; f_train / f_ref]),
+                            batchsize=64, shuffle=true)
 n_desc = size(B_train[1], 1)
-model = Chain(Dense(n_desc,100,Flux.relu),Dense(100,1))
+model = Chain(Dense(n_desc,32,Flux.tanh),
+              Dense(32,24,Flux.tanh),
+              Dense(24,1))
 nn(d) = sum(model(d))
 ps = Flux.params(model)
 n_params = sum(length, Flux.params(model))
-loss(b_pred, b) = mean(abs.((b_pred .- b) ./ b))
+loss(b_pred, b) = sum(abs.(b_pred .- b)) / length(b)
 global_loss(loader) =
     sum([loss(nn.(d), b) for (d, b) in loader]) / length(loader)
-opt = ADAM(0.0001)
-epochs = 5
+opt = ADAM(0.0001) # ADAM(0.002, (0.9, 0.999)) 
+epochs = 4
 for epoch in 1:epochs
     # Training of one epoch
     time = Base.@elapsed for (d, b) in train_loader
@@ -98,19 +103,20 @@ for epoch in 1:epochs
     println("Epoch: $(epoch), loss: $(global_loss(train_loader)), time: $(time)")
 end
 
+write(experiment_path*"params.dat", "$(ps)")
 
 # Compute errors ##############################################################
 function compute_errors(x_pred, x)
     x_rmse = sqrt(sum((x_pred .- x).^2) / length(x))
-    x_mae = mean(abs.(x_pred .- x) ./ length(x))
+    x_mae = sum(abs.(x_pred .- x)) / length(x)
     x_mre = mean(abs.((x_pred .- x) ./ x))
     x_maxre = maximum(abs.((x_pred .- x) ./ x))
     return x_rmse, x_mae, x_mre, x_maxre
 end
 
 # Compute training errors
-e_train_pred = nn.(B_train)
-f_train_pred = nn.(dB_train)
+e_train_pred = nn.(B_train) * e_ref
+f_train_pred = nn.(dB_train) * f_ref
 e_train_rmse, e_train_mae, e_train_mre, e_train_maxre = compute_errors(e_train_pred, e_train)
 f_train_rmse, f_train_mae, f_train_mre, f_train_maxre = compute_errors(f_train_pred, f_train)
 
@@ -119,14 +125,14 @@ B_test = calc_B(test_systems)
 dB_test = calc_dB(test_systems)
 e_test = test_energies
 f_test = vcat([vcat(vcat(f...)...) for f in test_forces]...)
-e_test_pred = nn.(B_test)
-f_test_pred = nn.(dB_test)
+e_test_pred = nn.(B_test) * e_ref
+f_test_pred = nn.(dB_test) * f_ref
 e_test_rmse, e_test_mae, e_test_mre, e_test_maxre = compute_errors(e_test_pred, e_test)
 f_test_rmse, f_test_mae, f_test_mre, f_test_maxre = compute_errors(f_test_pred, f_test)
 
 
 ## Save results #################################################################
-write(experiment_path*"results-nn.csv", "dataset,\
+write(experiment_path*"results.csv", "dataset,\
                       n_systems,n_params,n_body,max_deg,r0,rcutoff,wL,csp,\
                       e_train_rmse,e_train_mae,e_train_mre,e_train_maxre,\
                       f_train_rmse,f_train_mae,f_train_mre,f_train_maxre,\
@@ -140,4 +146,19 @@ write(experiment_path*"results-nn.csv", "dataset,\
                       $(e_test_rmse),$(e_test_mae),$(e_test_mre),$(e_test_maxre),\
                       $(f_test_rmse),$(f_test_mae),$(f_test_mre),$(f_test_maxre),\
                       $(B_time),$(dB_time)")
-
+write(experiment_path*"results-short.csv", "dataset,\
+                      n_systems,n_params,n_body,max_deg,r0,rcutoff,wL,csp,\
+                      e_test_rmse,e_test_mae,\
+                      f_test_rmse,f_test_mae,\
+                      B_time,dB_time
+                      $(dataset_filename), \
+                      $(n_systems),$(n_params),$(n_body),$(max_deg),$(r0),$(rcutoff),$(wL),$(csp),\
+                      $(e_test_rmse),$(e_test_mae),\
+                      $(f_test_rmse),$(f_test_mae),\
+                      $(B_time),$(dB_time)")
+e = plot( e_test, e_test_pred, seriestype = :scatter, markerstrokewidth=0,
+          label="", xlabel = "E DFT | eV/atom", ylabel = "E predicted | eV/atom")
+savefig(e, experiment_path*"e.png")
+f = plot( f_test, f_test_pred, seriestype = :scatter, markerstrokewidth=0,
+          label="", xlabel = "F DFT | eV/Å", ylabel = "F predicted | eV/Å")
+savefig(f, experiment_path*"f.png")

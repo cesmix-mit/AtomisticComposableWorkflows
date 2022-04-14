@@ -9,6 +9,7 @@ using StatsBase
 using UnitfulAtomic
 using Unitful 
 using BenchmarkTools
+using Plots
 
 include("load_data.jl")
 
@@ -85,7 +86,7 @@ write(experiment_path*"beta.dat", "$β")
 # Compute errors ##############################################################
 function compute_errors(x_pred, x)
     x_rmse = sqrt(sum((x_pred .- x).^2) / length(x))
-    x_mae = mean(abs.(x_pred .- x) ./ length(x))
+    x_mae = sum(abs.(x_pred .- x)) / length(x)
     x_mre = mean(abs.((x_pred .- x) ./ x))
     x_maxre = maximum(abs.((x_pred .- x) ./ x))
     return x_rmse, x_mae, x_mre, x_maxre
@@ -124,4 +125,22 @@ write(experiment_path*"results.csv", "dataset,\
                       $(e_test_rmse),$(e_test_mae),$(e_test_mre),$(e_test_maxre),\
                       $(f_test_rmse),$(f_test_mae),$(f_test_mre),$(f_test_maxre),\
                       $(B_time),$(dB_time)")
+write(experiment_path*"results-short.csv", "dataset,\
+                      n_systems,n_params,n_body,max_deg,r0,rcutoff,wL,csp,\
+                      e_test_rmse,e_test_mae,\
+                      f_test_rmse,f_test_mae,\
+                      B_time,dB_time
+                      $(dataset_filename), \
+                      $(n_systems),$(n_params),$(n_body),$(max_deg),$(r0),$(rcutoff),$(wL),$(csp),\
+                      $(e_test_rmse),$(e_test_mae),\
+                      $(f_test_rmse),$(f_test_mae),\
+                      $(B_time),$(dB_time)")
+e = plot( e_test_pred, e_test, seriestype = :scatter, markerstrokewidth=0,
+          label="", xlabel = "E DFT | eV/atom", ylabel = "E predicted | eV/atom")
+savefig(e, experiment_path*"e.png")
+f = plot( f_test_pred, f_test, seriestype = :scatter, markerstrokewidth=0,
+          label="", xlabel = "F DFT | eV/Å", ylabel = "F predicted | eV/Å")
+savefig(f, experiment_path*"f.png")
+
+
 
