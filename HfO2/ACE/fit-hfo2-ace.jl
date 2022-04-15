@@ -82,7 +82,7 @@ write(experiment_path*"B_test.dat", "$(B_test)")
 write(experiment_path*"dB_test.dat", "$(dB_test)")
 
 
-# Calculate A and b ###########################################################
+# Calculate A and b ############################################################
 A = [B_train; dB_train]
 b_train = [e_train; f_train]
 

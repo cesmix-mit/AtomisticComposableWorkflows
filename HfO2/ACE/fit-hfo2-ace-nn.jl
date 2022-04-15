@@ -86,17 +86,31 @@ write(experiment_path*"dB_test.dat", "$(dB_test)")
 
 # Define neural network model ##################################################
 
-# Define loaders
-e_ref = maximum(abs.(e_train)); f_ref = maximum(abs.(f_train))
-train_loader = DataLoader(([B_train; dB_train],
+# Normalize and split data into batches
+e_ref = maximum(abs.(e_train))
+f_ref = maximum(abs.(f_train))
+B_ref = maximum([maximum(abs.(b)) for b in B_train]);
+dB_ref = maximum([maximum(abs.(db)) for db in dB_train]);
+train_loader = DataLoader(([B_train / B_ref; dB_train / dB_ref],
                            [e_train / e_ref; f_train / f_ref]),
                             batchsize=32, shuffle=true)
-test_loader = DataLoader(([B_test; dB_test],
+test_loader = DataLoader(([B_test / B_ref; dB_test / dB_ref],
                           [e_test / e_ref; f_test / f_ref]),
                            batchsize=32)
 
+#B_train_2  = [[[0];b]  /  B_ref for b  in B_train]
+#dB_train_2 = [[[1];db] / dB_ref for db in dB_train]
+#B_test_2   = [[[0];b]  /  B_ref for b  in B_test]
+#dB_test_2  = [[[1];db] / dB_ref for db in dB_test]
+#train_loader = DataLoader(( [B_train_2; dB_train_2], 
+#                            [e_train / e_ref; f_train / f_ref]),
+#                             batchsize=32, shuffle=true)
+#test_loader = DataLoader(( [B_test_2; dB_test_2],
+#                           [e_test / e_ref; f_test / f_ref]),
+#                            batchsize=32)
+
 # Define neural network model
-n_desc = size(B_train[1], 1)
+n_desc = size(first(train_loader)[1][1], 1) # size(B_train[1], 1) + 1
 model = Chain(Dense(n_desc,16,Flux.tanh), Dense(16,16,Flux.tanh), Dense(16,1))
 nn(d) = sum(model(d))
 ps = Flux.params(model)
@@ -139,8 +153,8 @@ function compute_errors(x_pred, x)
 end
 
 # Compute predictions 
-e_train_pred = nn.(B_train) * e_ref; f_train_pred = nn.(dB_train) * f_ref
-e_test_pred = nn.(B_test) * e_ref; f_test_pred = nn.(dB_test) * f_ref
+e_train_pred = nn.(B_train / B_ref) * e_ref; f_train_pred = nn.(dB_train / dB_ref) * f_ref
+e_test_pred  = nn.(B_test / B_ref) * e_ref; f_test_pred = nn.(dB_test / dB_ref) * f_ref
 
 # Compute errors
 e_train_rmse, e_train_mae, e_train_mre, e_train_maxre = compute_errors(e_train_pred, e_train)

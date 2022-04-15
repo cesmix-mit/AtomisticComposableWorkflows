@@ -9,7 +9,6 @@ using BenchmarkTools
 using Plots
 
 include("load_data.jl")
-include("save_results.jl")
 
 experiment_path = "md-ahfo2-ace-molly/"
 run(`mkdir -p $experiment_path`)
