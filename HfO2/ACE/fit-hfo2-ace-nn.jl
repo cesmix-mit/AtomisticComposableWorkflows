@@ -91,23 +91,16 @@ e_ref = maximum(abs.(e_train))
 f_ref = maximum(abs.(f_train))
 B_ref = maximum([maximum(abs.(b)) for b in B_train]);
 dB_ref = maximum([maximum(abs.(db)) for db in dB_train]);
+e_train_loader = DataLoader(( B_train / B_ref, e_train / e_ref),
+                              batchsize=32, shuffle=true)
+e_test_loader = DataLoader(( B_test / B_ref, e_test / e_ref),
+                             batchsize=32)
 train_loader = DataLoader(([B_train / B_ref; dB_train / dB_ref],
                            [e_train / e_ref; f_train / f_ref]),
                             batchsize=32, shuffle=true)
 test_loader = DataLoader(([B_test / B_ref; dB_test / dB_ref],
                           [e_test / e_ref; f_test / f_ref]),
                            batchsize=32)
-
-#B_train_2  = [[[0];b]  /  B_ref for b  in B_train]
-#dB_train_2 = [[[1];db] / dB_ref for db in dB_train]
-#B_test_2   = [[[0];b]  /  B_ref for b  in B_test]
-#dB_test_2  = [[[1];db] / dB_ref for db in dB_test]
-#train_loader = DataLoader(( [B_train_2; dB_train_2], 
-#                            [e_train / e_ref; f_train / f_ref]),
-#                             batchsize=32, shuffle=true)
-#test_loader = DataLoader(( [B_test_2; dB_test_2],
-#                           [e_test / e_ref; f_test / f_ref]),
-#                            batchsize=32)
 
 # Define neural network model
 n_desc = size(first(train_loader)[1][1], 1) # size(B_train[1], 1) + 1
@@ -126,7 +119,10 @@ opt = ADAM(0.001) # ADAM(0.002, (0.9, 0.999))
 
 
 # Train ########################################################################
-epochs = 4; time_train = 0
+time_train = 0
+
+# Train energies and forces
+epochs = 4
 for epoch in 1:epochs
     # Training of one epoch
     time = Base.@elapsed for (d, b) in train_loader
@@ -140,8 +136,25 @@ for epoch in 1:epochs
              testing loss: $(global_loss(test_loader)), \
              time: $(time)")
 end
-write(experiment_path*"params.dat", "$(ps)")
 
+# Train energies
+epochs = 30
+opt = ADAM(0.0001)
+for epoch in 1:epochs
+    # Training of one epoch
+    time = Base.@elapsed for (d, b) in e_train_loader
+        gs = gradient(() -> loss(nn.(d), b), ps)
+        Flux.Optimise.update!(opt, ps, gs)
+    end
+    global time_train += time
+    # Report losses and time
+    println("Epoch: $(epoch), \
+             training loss: $(global_loss(e_train_loader)), \
+             testing loss: $(global_loss(e_test_loader)), \
+             time: $(time)")
+end
+
+write(experiment_path*"params.dat", "$(ps)")
 
 # Compute errors ##############################################################
 function compute_errors(x_pred, x)
