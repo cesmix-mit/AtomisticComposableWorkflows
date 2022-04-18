@@ -31,10 +31,11 @@ run(`mkdir -p $experiment_path`)
 
 # Load dataset #################################################################
 dataset_path = input[2]; dataset_filename = input[3]
-systems, energies, forces, stresses = load_data(dataset_path*dataset_filename)
+systems, energies, forces, stresses = load_data(dataset_path*dataset_filename, 
+                                      max_entries = parse(Int64, input[4]))
 
 # Split into training and testing
-n_systems = parse(Int64, input[4]) # length(systems)
+n_systems = length(systems)
 n_train = floor(Int, n_systems * 0.8)
 n_test  = n_systems - n_train
 rand_list = randperm(n_systems)
@@ -105,7 +106,7 @@ test_loader    = DataLoader(([B_test / B_ref; dB_test / dB_ref],
 
 # Define neural network model
 n_desc = size(first(train_loader)[1][1], 1) # size(B_train[1], 1) + 1
-model = Chain(Dense(n_desc,16,Flux.relu), Dense(16,16,Flux.relu), Dense(16,1))
+model = Chain(Dense(n_desc,16,Flux.relu), Dense(16,1))
 nn(d) = sum(model(d))
 ps = Flux.params(model)
 n_params = sum(length, Flux.params(model))
@@ -138,11 +139,11 @@ end
 
 # Train energies and forces
 println("Training energies and forces...")
-epochs = 10; train(epochs, train_loader)
+epochs = 200; train(epochs, train_loader)
 
 # Train energies
 println("Training energies...")
-epochs = 20; train(epochs, e_train_loader)
+epochs = 200; train(epochs, e_train_loader)
 
 write(experiment_path*"params.dat", "$(ps)")
 

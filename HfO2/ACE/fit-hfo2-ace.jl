@@ -28,10 +28,12 @@ run(`mkdir -p $experiment_path`)
 
 # Load dataset #################################################################
 dataset_path = input[2]; dataset_filename = input[3]
-systems, energies, forces, stresses = load_data(dataset_path*dataset_filename)
+systems, energies, forces, stresses = load_data(dataset_path*dataset_filename, 
+                                      max_entries = parse(Int64, input[4]))
+
 
 # Split into training and testing
-n_systems = parse(Int64, input[4]) # length(systems)
+n_systems = length(systems)
 n_train = floor(Int, n_systems * 0.8)
 n_test  = n_systems - n_train
 rand_list = randperm(n_systems)
@@ -105,8 +107,8 @@ function compute_errors(x_pred, x)
 end
 
 # Compute predictions 
-e_train_pred = nn.(B_train / B_ref) * e_ref; f_train_pred = nn.(dB_train / dB_ref) * f_ref
-e_test_pred  = nn.(B_test / B_ref) * e_ref; f_test_pred = nn.(dB_test / dB_ref) * f_ref
+e_train_pred = B_train * β; f_train_pred = dB_train * β
+e_test_pred = B_test * β; f_test_pred = dB_test * β
 
 # Compute errors
 e_train_mae, e_train_mre, e_train_rmse, e_train_rsq = compute_errors(e_train_pred, e_train)
