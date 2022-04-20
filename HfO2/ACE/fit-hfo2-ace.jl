@@ -11,26 +11,40 @@ using Unitful
 using BenchmarkTools
 using Plots
 
-include("load-data.jl")
-
-
-# Input: experiment_path, dataset_path, dataset_file, n_body, max_deg, r0, rcutoff, wL, csp
+# Load input parameters ########################################################
 if size(ARGS, 1) == 0
-    input = ["fit-ahfo2-ace/", "data/", "a-Hfo2-300K-NVT.extxyz",
-             "1400", "2", "3", "1", "5", "1", "1"]
+    input = ["fit-hfo2-ace/", "data/", "HfO2_cpmd_train_0_94_11.xyz",
+             "1800", "3", "3", "1", "5", "1", "1", "1", "1"]
+    #input = ["fit-ahfo2-ace/", "data/", "a-Hfo2-300K-NVT.extxyz",
+    #         "1400", "2", "3", "1", "5", "1", "1", "1", "1"]
 else
     input = ARGS
 end
+input = Dict( "experiment_path"     => input[1],
+              "dataset_path"        => input[2],
+              "dataset_filename"    => input[3],
+              "n_systems"           => parse(Int64, input[4]),
+              "n_body"              => parse(Int64, input[5]),
+              "max_deg"             => parse(Int64, input[6]),
+              "r0"                  => parse(Float64, input[7]),
+              "rcutoff"             => parse(Float64, input[8]),
+              "wL"                  => parse(Float64, input[9]),
+              "csp"                 => parse(Float64, input[10]),
+              "e_weight"            => parse(Float64, input[11]),
+              "f_weight"            => parse(Float64, input[12]))
 
-experiment_path = input[1]
+
+# Create experiment folder #####################################################
+experiment_path = input["experiment_path"]
 run(`mkdir -p $experiment_path`)
+write(experiment_path*"input.dat", "$input")
 
 
 # Load dataset #################################################################
-dataset_path = input[2]; dataset_filename = input[3]
-systems, energies, forces, stresses = load_data(dataset_path*dataset_filename, 
-                                      max_entries = parse(Int64, input[4]))
-
+include("load-data.jl")
+filename = input["dataset_path"]*input["dataset_filename"]
+systems, energies, forces, stresses = load_data(filename,
+                                                max_entries = input["n_systems"])
 
 # Split into training and testing
 n_systems = length(systems)
@@ -58,12 +72,12 @@ write(experiment_path*"f_test.dat", "$(f_test)")
 
 
 # Define RPI parameters ########################################################
-n_body = parse(Int64, input[5])
-max_deg = parse(Int64, input[6])
-r0 = parse(Float64, input[7])
-rcutoff = parse(Float64, input[8])
-wL = parse(Float64, input[9])
-csp = parse(Float64, input[10])
+n_body = input["n_body"]
+max_deg = input["max_deg"]
+r0 = input["r0"]
+rcutoff = input["rcutoff"]
+wL = input["wL"]
+csp = input["csp"]
 rpi_params = RPIParams([:Hf, :O], n_body, max_deg, wL, csp, r0, rcutoff)
 write(experiment_path*"rpi_params.dat", "$(rpi_params)")
 
@@ -86,18 +100,41 @@ write(experiment_path*"dB_test.dat", "$(dB_test)")
 # Calculate A and b ############################################################
 time_fitting = Base.@elapsed begin
 A = [B_train; dB_train]
-b_train = [e_train; f_train]
+b = [e_train; f_train]
 
 
 # Calculate coefficients β #####################################################
-Q = Diagonal([0.5 .+ 0.0 * e_train; 90.0 .+ 0.0*f_train])
-β = (A'*Q*A) \ (A'*Q*b_train)
+e_weight = input["e_weight"]; f_weight = input["f_weight"]
+Q = Diagonal([e_weight * ones(length(e_train));
+              f_weight * ones(length(f_train))])
+β = (A'*Q*A) \ (A'*Q*b)
+
 end
+
+## Check weights
+#using IterTools
+#for (e_weight, f_weight) in product(1:10:100, 1:10:100)
+#    Q = Diagonal([e_weight * ones(length(e_train));
+#                  f_weight * ones(length(f_train))])
+#    try
+#        β = (A'*Q*A) \ (A'*Q*b)
+#        a = compute_errors(dB_test * β, f_test)
+#        println(e_weight,", ", f_weight, ", ", a[1])
+#    catch
+#        println("Exception with :", e_weight,", ", f_weight)
+#    end
+#end
+
 n_params = size(β,1)
 write(experiment_path*"beta.dat", "$β")
 
 
-# Compute errors ##############################################################
+# Calculate predictions ########################################################
+e_train_pred = B_train * β; f_train_pred = dB_train * β
+e_test_pred = B_test * β; f_test_pred = dB_test * β
+
+
+# Calculate errors #############################################################
 function compute_errors(x_pred, x)
     x_mae = sum(abs.(x_pred .- x)) / length(x)
     x_mre = mean(abs.((x_pred .- x) ./ x))
@@ -106,11 +143,6 @@ function compute_errors(x_pred, x)
     return x_mae, x_mre, x_rmse, x_rsq
 end
 
-# Compute predictions 
-e_train_pred = B_train * β; f_train_pred = dB_train * β
-e_test_pred = B_test * β; f_test_pred = dB_test * β
-
-# Compute errors
 e_train_mae, e_train_mre, e_train_rmse, e_train_rsq = compute_errors(e_train_pred, e_train)
 f_train_mae, f_train_mre, f_train_rmse, f_train_rsq = compute_errors(f_train_pred, f_train)
 e_test_mae, e_test_mre, e_test_rmse, e_test_rsq = compute_errors(e_test_pred, e_test)
@@ -118,15 +150,18 @@ f_test_mae, f_test_mre, f_test_rmse, f_test_rsq = compute_errors(f_test_pred, f_
 
 
 # Save results #################################################################
+dataset_filename = input["dataset_filename"]
 write(experiment_path*"results.csv", "dataset,\
-                      n_systems,n_params,n_body,max_deg,r0,rcutoff,wL,csp,\
+                      n_systems,n_params,n_body,max_deg,r0,\
+                      rcutoff,wL,csp,e_weight,f_weight,\
                       e_train_mae,e_train_mre,e_train_rmse,e_train_rsq,\
                       f_train_mae,f_train_mre,f_train_rmse,f_train_rsq,\
                       e_test_mae,e_test_mre,e_test_rmse,e_test_rsq,\
                       f_test_mae,f_test_mre,f_test_rmse,f_test_rsq,\
                       B_time,dB_time,time_fitting
                       $(dataset_filename), \
-                      $(n_systems),$(n_params),$(n_body),$(max_deg),$(r0),$(rcutoff),$(wL),$(csp),\
+                      $(n_systems),$(n_params),$(n_body),$(max_deg),$(r0),\
+                      $(rcutoff),$(wL),$(csp),$(e_weight),$(f_weight),\
                       $(e_train_mae),$(e_train_mre),$(e_train_rmse),$(e_train_rsq),\
                       $(f_train_mae),$(f_train_mre),$(f_train_rmse),$(f_train_rsq),\
                       $(e_test_mae),$(e_test_mre),$(e_test_rmse),$(e_test_rsq),\
