@@ -78,7 +78,8 @@ r0 = input["r0"]
 rcutoff = input["rcutoff"]
 wL = input["wL"]
 csp = input["csp"]
-rpi_params = RPIParams([:Hf, :O], n_body, max_deg, wL, csp, r0, rcutoff)
+atomic_symbols = unique(atomic_symbol(systems[1]))
+rpi_params = RPIParams(atomic_symbols, n_body, max_deg, wL, csp, r0, rcutoff)
 write(experiment_path*"rpi_params.dat", "$(rpi_params)")
 
 

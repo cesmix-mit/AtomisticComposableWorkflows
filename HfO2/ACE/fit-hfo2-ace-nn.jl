@@ -81,7 +81,8 @@ r0 = input["r0"]
 rcutoff = input["rcutoff"]
 wL = input["wL"]
 csp = input["csp"]
-rpi_params = RPIParams([:Hf, :O], n_body, max_deg, wL, csp, r0, rcutoff)
+atomic_symbols = unique(atomic_symbol(systems[1]))
+rpi_params = RPIParams(atomic_symbols, n_body, max_deg, wL, csp, r0, rcutoff)
 write(experiment_path*"rpi_params.dat", "$(rpi_params)")
 
 
@@ -128,7 +129,7 @@ ps = Flux.params(model)
 n_params = sum(length, Flux.params(model))
 
 # Define loss functions
-e_weight = input["e_weight"]; f_weight = input["f_weight"]
+e_weight = input["e_weight"]; f_weight = input["f_weight"] # not needed for now
 loss(b_pred, b) = sum(abs.(b_pred .- b)) / length(b)
 global_loss(loader) = sum([loss(nn.(d), b) for (d, b) in loader]) / length(loader)
 
@@ -159,8 +160,8 @@ println("Training energies and forces...")
 epochs = 30; train(epochs, train_loader)
 
 # Train energies
-#println("Training energies...")
-#epochs = 200; train(epochs, e_train_loader)
+println("Training energies...")
+epochs = 200; train(epochs, e_train_loader)
 
 write(experiment_path*"params.dat", "$(ps)")
 
