@@ -11,7 +11,7 @@ echo "dataset,"\
      "f_train_mae,f_train_mre,f_train_rmse,f_train_rsq,"\
      "e_test_mae,e_test_mre,e_test_rmse,e_test_rsq,"\
      "f_test_mae,f_test_mre,f_test_rmse,f_test_rsq,"\
-     "B_time,dB_time,time_fitting"  >> $exp/$results
+     "f_test_mean_cos,B_time,dB_time,time_fitting"  >> $exp/$results
 
 # Gather results
 path=`pwd`

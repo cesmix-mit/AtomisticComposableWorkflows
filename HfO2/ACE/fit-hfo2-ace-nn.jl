@@ -64,10 +64,12 @@ test_systems, test_energies, test_forces, test_stress =
                              forces[test_index], stresses[test_index]
 
 # Linearize energies and forces
+calc_F(forces) = vcat([vcat(vcat(f...)...) for f in forces]...)
 e_train = train_energies
-f_train = vcat([vcat(vcat(f...)...) for f in train_forces]...)
+f_train = calc_F(train_forces)
 e_test = test_energies
-f_test = vcat([vcat(vcat(f...)...) for f in test_forces]...)
+f_test_v = test_forces
+f_test = calc_F(test_forces)
 write(experiment_path*"e_train.dat", "$(e_train)")
 write(experiment_path*"f_train.dat", "$(f_train)")
 write(experiment_path*"e_test.dat", "$(e_test)")
@@ -166,9 +168,12 @@ epochs = 200; train(epochs, e_train_loader)
 write(experiment_path*"params.dat", "$(ps)")
 
 
-# Compute predictions ########################################################
-e_train_pred = nn.(B_train / B_ref) * e_ref; f_train_pred = nn.(dB_train / dB_ref) * f_ref
-e_test_pred  = nn.(B_test / B_ref) * e_ref; f_test_pred = nn.(dB_test / dB_ref) * f_ref
+# Calculate predictions ########################################################
+e_train_pred = nn.(B_train / B_ref) * e_ref
+f_train_pred = nn.(dB_train / dB_ref) * f_ref
+e_test_pred  = nn.(B_test / B_ref) * e_ref
+f_test_pred = nn.(dB_test / dB_ref) * f_ref
+f_test_pred_v = collect(eachcol(reshape(f_test_pred, 3, :)))
 
 
 # Calculate errors #############################################################
@@ -185,6 +190,9 @@ f_train_mae, f_train_mre, f_train_rmse, f_train_rsq = compute_errors(f_train_pre
 e_test_mae, e_test_mre, e_test_rmse, e_test_rsq = compute_errors(e_test_pred, e_test)
 f_test_mae, f_test_mre, f_test_rmse, f_test_rsq = compute_errors(f_test_pred, f_test)
 
+f_test_cos = dot.(f_test_v, f_test_pred_v) ./ (norm.(f_test_v) .* norm.(f_test_pred_v))
+f_test_mean_cos = mean(f_test_cos)
+
 
 # Save results #################################################################
 dataset_filename = input["dataset_filename"]
@@ -195,7 +203,7 @@ write(experiment_path*"results.csv", "dataset,\
                       f_train_mae,f_train_mre,f_train_rmse,f_train_rsq,\
                       e_test_mae,e_test_mre,e_test_rmse,e_test_rsq,\
                       f_test_mae,f_test_mre,f_test_rmse,f_test_rsq,\
-                      B_time,dB_time,time_fitting
+                      f_test_mean_cos,B_time,dB_time,time_fitting
                       $(dataset_filename), \
                       $(n_systems),$(n_params),$(n_body),$(max_deg),$(r0),\
                       $(rcutoff),$(wL),$(csp),$(e_weight),$(f_weight),\
@@ -203,7 +211,7 @@ write(experiment_path*"results.csv", "dataset,\
                       $(f_train_mae),$(f_train_mre),$(f_train_rmse),$(f_train_rsq),\
                       $(e_test_mae),$(e_test_mre),$(e_test_rmse),$(e_test_rsq),\
                       $(f_test_mae),$(f_test_mre),$(f_test_rmse),$(f_test_rsq),\
-                      $(B_time),$(dB_time),$(time_fitting)")
+                      $(f_test_mean_cos),$(B_time),$(dB_time),$(time_fitting)")
 
 write(experiment_path*"results-short.csv", "dataset,\
                       n_systems,n_params,n_body,max_deg,r0,rcutoff,\
@@ -218,9 +226,13 @@ write(experiment_path*"results-short.csv", "dataset,\
 
 e = plot( e_test, e_test_pred, seriestype = :scatter, markerstrokewidth=0,
           label="", xlabel = "E DFT | eV/atom", ylabel = "E predicted | eV/atom")
-savefig(e, experiment_path*"e.png")
+savefig(e, experiment_path*"e_test.png")
 
-f = plot( f_test, f_test_pred, seriestype = :scatter, markerstrokewidth=0,
-          label="", xlabel = "F DFT | eV/Å", ylabel = "F predicted | eV/Å")
-savefig(f, experiment_path*"f.png")
+f = plot( norm.(f_test_v), norm.(f_test_pred_v), seriestype = :scatter, markerstrokewidth=0,
+          label="", xlabel = "|F| DFT | eV/Å", ylabel = "|F| predicted | eV/Å")
+savefig(f, experiment_path*"f_test.png")
+
+c = plot( f_test_cos, seriestype = :scatter, markerstrokewidth=0,
+          label="", xlabel = "F DFT vs F predicted", ylabel = "cos(α)")
+savefig(c, experiment_path*"f_test_cos.png")
 

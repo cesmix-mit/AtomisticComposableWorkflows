@@ -13,10 +13,10 @@ using Plots
 
 # Load input parameters ########################################################
 if size(ARGS, 1) == 0
-    input = ["fit-hfo2-ace/", "data/", "HfO2_cpmd_train_0_94_11.xyz",
-             "1800", "3", "3", "1", "5", "1", "1", "1", "1"]
-    #input = ["fit-ahfo2-ace/", "data/", "a-Hfo2-300K-NVT.extxyz",
-    #         "1400", "2", "3", "1", "5", "1", "1", "1", "1"]
+    #input = ["fit-hfo2-ace/", "data/", "HfO2_cpmd_train_0_94_11.xyz",
+    #         "1800", "4", "4", "1", "5", "1", "1", "1", "1"]
+    input = ["fit-ahfo2-ace/", "data/", "a-Hfo2-300K-NVT.extxyz",
+             "1400", "4", "4", "1", "5", "1", "1", "1", "1"]
 else
     input = ARGS
 end
@@ -64,6 +64,7 @@ calc_F(forces) = vcat([vcat(vcat(f...)...) for f in forces]...)
 e_train = train_energies
 f_train = calc_F(train_forces)
 e_test = test_energies
+f_test_v = test_forces
 f_test = calc_F(test_forces)
 write(experiment_path*"e_train.dat", "$(e_train)")
 write(experiment_path*"f_train.dat", "$(f_train)")
@@ -103,6 +104,13 @@ time_fitting = Base.@elapsed begin
 A = [B_train; dB_train]
 b = [e_train; f_train]
 
+# Filter outliers
+#fmean = mean(f_train); fstd = std(f_train)
+#non_outliers = fmean - 2fstd .< f_train .< fmean + 2fstd 
+#f_train = f_train[non_outliers]
+#v = BitVector([ ones(length(e_train)); non_outliers])
+#A = A[v , :]
+
 
 # Calculate coefficients β #####################################################
 e_weight = input["e_weight"]; f_weight = input["f_weight"]
@@ -131,8 +139,11 @@ write(experiment_path*"beta.dat", "$β")
 
 
 # Calculate predictions ########################################################
-e_train_pred = B_train * β; f_train_pred = dB_train * β
-e_test_pred = B_test * β; f_test_pred = dB_test * β
+e_train_pred = B_train * β
+f_train_pred = dB_train * β
+e_test_pred = B_test * β
+f_test_pred = dB_test * β
+f_test_pred_v = collect(eachcol(reshape(f_test_pred, 3, :)))
 
 
 # Calculate errors #############################################################
@@ -149,6 +160,9 @@ f_train_mae, f_train_mre, f_train_rmse, f_train_rsq = compute_errors(f_train_pre
 e_test_mae, e_test_mre, e_test_rmse, e_test_rsq = compute_errors(e_test_pred, e_test)
 f_test_mae, f_test_mre, f_test_rmse, f_test_rsq = compute_errors(f_test_pred, f_test)
 
+f_test_cos = dot.(f_test_v, f_test_pred_v) ./ (norm.(f_test_v) .* norm.(f_test_pred_v))
+f_test_mean_cos = mean(f_test_cos)
+
 
 # Save results #################################################################
 dataset_filename = input["dataset_filename"]
@@ -159,7 +173,7 @@ write(experiment_path*"results.csv", "dataset,\
                       f_train_mae,f_train_mre,f_train_rmse,f_train_rsq,\
                       e_test_mae,e_test_mre,e_test_rmse,e_test_rsq,\
                       f_test_mae,f_test_mre,f_test_rmse,f_test_rsq,\
-                      B_time,dB_time,time_fitting
+                      f_test_mean_cos,B_time,dB_time,time_fitting
                       $(dataset_filename), \
                       $(n_systems),$(n_params),$(n_body),$(max_deg),$(r0),\
                       $(rcutoff),$(wL),$(csp),$(e_weight),$(f_weight),\
@@ -167,7 +181,7 @@ write(experiment_path*"results.csv", "dataset,\
                       $(f_train_mae),$(f_train_mre),$(f_train_rmse),$(f_train_rsq),\
                       $(e_test_mae),$(e_test_mre),$(e_test_rmse),$(e_test_rsq),\
                       $(f_test_mae),$(f_test_mre),$(f_test_rmse),$(f_test_rsq),\
-                      $(B_time),$(dB_time),$(time_fitting)")
+                      $(f_test_mean_cos),$(B_time),$(dB_time),$(time_fitting)")
 
 write(experiment_path*"results-short.csv", "dataset,\
                       n_systems,n_params,n_body,max_deg,r0,rcutoff,\
@@ -182,9 +196,13 @@ write(experiment_path*"results-short.csv", "dataset,\
 
 e = plot( e_test, e_test_pred, seriestype = :scatter, markerstrokewidth=0,
           label="", xlabel = "E DFT | eV/atom", ylabel = "E predicted | eV/atom")
-savefig(e, experiment_path*"e.png")
+savefig(e, experiment_path*"e_test.png")
 
-f = plot( f_test, f_test_pred, seriestype = :scatter, markerstrokewidth=0,
-          label="", xlabel = "F DFT | eV/Å", ylabel = "F predicted | eV/Å")
-savefig(f, experiment_path*"f.png")
+f = plot( norm.(f_test_v), norm.(f_test_pred_v), seriestype = :scatter, markerstrokewidth=0,
+          label="", xlabel = "|F| DFT | eV/Å", ylabel = "|F| predicted | eV/Å")
+savefig(f, experiment_path*"f_test.png")
+
+c = plot( f_test_cos, seriestype = :scatter, markerstrokewidth=0,
+          label="", xlabel = "F DFT vs F predicted", ylabel = "cos(α)")
+savefig(c, experiment_path*"f_test_cos.png")
 

@@ -46,10 +46,10 @@ csp = 0.5:0.5:1.5
 # pin = 0 is the default.
 
 # e_weight: energy weight, used during fitting in normal equations
-e_weight = 0.5:0.5:1.5
+e_weight = [1e-8, 1, 100]
 
 # f_weight: force weight, used during fitting in normal equations
-f_weight = 0.5:0.5:1.5
+f_weight = [1e-8, 1, 100]
 
 
 # Run experiments ##############################################################
