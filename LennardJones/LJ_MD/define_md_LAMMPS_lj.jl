@@ -1,7 +1,7 @@
 using LAMMPS
 function run_md(Tend::Int, save_dir::String; seed = 1, Temp = 0.5, dt = 0.001, dT = 10)
     save_dir = save_dir
-    
+    ϵ = 0.01034 + 0.01 * 0.01034 * randn()
     try
         mkdir(save_dir)
     catch
@@ -25,7 +25,7 @@ function run_md(Tend::Int, save_dir::String; seed = 1, Temp = 0.5, dt = 0.001, d
             command(lmp, "velocity all create $(Temp) $seed mom yes rot yes dist gaussian")
             # Setup Forcefield
             command(lmp, "pair_style hybrid lj/cut 4.0")
-            command(lmp, "pair_coeff 1 1 lj/cut 0.01034 1.0")
+            command(lmp, "pair_coeff 1 1 lj/cut $(ϵ) 1.0")
             
             # computes
             command(lmp, "compute S all pressure NULL virial") # Stress tensor without kinetic energy component (only the virial)

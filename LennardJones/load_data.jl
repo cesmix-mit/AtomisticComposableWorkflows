@@ -1,4 +1,27 @@
+# Save β
+using ACE1
+using JuLIP
+function save_β_to_file(β, rpi_params, directory_name)
+        try
+            mkdir("ACE_MD/$(directory_name)/")
+        catch
+        
+    end
+    basis = get_rpi(rpi_params)
+    IP = JuLIP.MLIPs.combine(basis, β)
+    ACE1.Export.export_ace("ACE_MD/$(directory_name)/parameters.ace", IP)
 
+    # Make adjustment for package name ACE1.jl -> ACE.jl
+    fff = readlines("ACE_MD/$(directory_name)/parameters.ace")
+    fff[10] = "radbasename=ACE.jl.Basic"
+    open("ACE_MD/$(directory_name)/parameters.ace", "w") do io
+        for l in fff
+            write(io, l*"\n")
+        end
+    end
+end
+
+# Load data
 function load_data(file; max_entries = 2000 )
     systems  = AbstractSystem[]
     energies = Float64[]
@@ -85,5 +108,6 @@ function load_data(file; max_entries = 2000 )
     end
     return systems, energies, forces, stresses
 end
+
 
 

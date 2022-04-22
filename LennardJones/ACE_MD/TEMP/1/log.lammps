@@ -1,0 +1,20 @@
+units metal
+dimension 3
+atom_style atomic
+atom_modify map array
+boundary f f f
+region mybox block -5 5 -5 5 -5 5
+read_data starting_configuration.lj
+Reading data file ...
+  orthogonal box = (-5.0000000 -5.0000000 -5.0000000) to (5.0000000 5.0000000 5.0000000)
+  1 by 1 by 1 MPI processor grid
+  reading atoms ...
+  13 atoms
+  read_data CPU = 0.002 seconds
+mass 1 39.948
+velocity all create 78.0 1 mom yes rot yes dist gaussian
+pair_style pace
+ACE version: 2021.4.9
+Recursive evaluator is used
+pair_coeff * * ACE_MD/TEMP/parameters.ace Ar
+Loading 

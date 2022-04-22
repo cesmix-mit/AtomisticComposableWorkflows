@@ -1,3 +1,10 @@
+LennardJones/fitting/compare_fits.jl
+LennardJones/fitting/fit_2d_basic_dpp.jl
+LennardJones/fitting/plot_dist_active_learning.jl
+LennardJones/IAP_coefficient_samples
+LennardJones/saved_data
+LennardJones/images
+LennardJones/analyze
 Sodium/TEMP/*
 LennardJones/LJ_MD/2/*
 LennardJones/LJ_MD/3/*
