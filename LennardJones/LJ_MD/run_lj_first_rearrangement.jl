@@ -9,7 +9,7 @@ using JLD
 using InteratomicPotentials
 
 include("../load_data.jl")
-
+include("define_md_LAMMPS_lj.jl")
 Tend = Int(1.5E6)
 dT = 50
 Temp = 0.65 * 120

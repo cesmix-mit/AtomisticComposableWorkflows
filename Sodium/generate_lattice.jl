@@ -9,10 +9,11 @@ function compute_lattice(lattice_constant, save_dir::String)
             command(lmp, "boundary p p p")
 
             # Setup box
-            command(lmp, "lattice bcc $(lattice_constant)")
-            command(lmp, "region box block 0 3 0 3 0 3")
+            command(lmp, "region box block 0 13.0 0 13.0 0 13.0 units lattice")
             command(lmp, "create_box 1 box")
+            command(lmp, "lattice bcc $(lattice_constant)")
             command(lmp, "create_atoms 1 box")
+            
 
             command(lmp, "mass 1 22.989769")
             # Setup Forcefield
@@ -33,5 +34,6 @@ function compute_lattice(lattice_constant, save_dir::String)
 end
 
 save_dir = "./"
-lattice_parameter = 4.2906 # From Nichol and Auckland
+lattice_parameter = 4.28 # From Nichol and Auckland
+# lattice_parameter = 3.71
 compute_lattice(lattice_parameter, save_dir)

@@ -1,5 +1,5 @@
 using LAMMPS
-include("define_md_LAMMPS.jl")
+include("define_md_LAMMPS_ace.jl")
 
 
 ## Run MD for different coefficients and different seeds
