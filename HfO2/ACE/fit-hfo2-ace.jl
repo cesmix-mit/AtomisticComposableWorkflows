@@ -16,7 +16,7 @@ if size(ARGS, 1) == 0
     #input = ["fit-hfo2-ace/", "data/", "HfO2_cpmd_train_0_94_11.xyz",
     #         "1800", "4", "4", "1", "5", "1", "1", "1", "1"]
     input = ["fit-ahfo2-ace/", "data/", "a-Hfo2-300K-NVT.extxyz",
-             "1400", "4", "4", "1", "5", "1", "1", "1", "1"]
+             "100", "3", "3", "1", "5", "1", "1", "1", "1"]
 else
     input = ARGS
 end
@@ -64,7 +64,7 @@ calc_F(forces) = vcat([vcat(vcat(f...)...) for f in forces]...)
 e_train = train_energies
 f_train = calc_F(train_forces)
 e_test = test_energies
-f_test_v = test_forces
+f_test_v = vcat(test_forces...)
 f_test = calc_F(test_forces)
 write(experiment_path*"e_train.dat", "$(e_train)")
 write(experiment_path*"f_train.dat", "$(f_train)")
@@ -85,10 +85,10 @@ write(experiment_path*"rpi_params.dat", "$(rpi_params)")
 
 
 # Calculate descriptors ########################################################
-calc_B(systems) = vcat((evaluate_basis.(systems, [rpi_params])'...))
-calc_dB(systems) =
-    vcat([vcat(d...) for d in evaluate_basis_d.(systems, [rpi_params])]...)
-    #vcat([vcat(d...) for d in ThreadsX.collect(evaluate_basis_d(s, rpi_params) for s in systems)]...)
+calc_B(sys) = vcat((evaluate_basis.(sys, [rpi_params])'...))
+calc_dB(sys) =
+    vcat([vcat(d...) for d in evaluate_basis_d.(sys, [rpi_params])]...)
+    #vcat([vcat(d...) for d in ThreadsX.collect(evaluate_basis_d(s, rpi_params) for s in sys)]...)
 B_time = @time @elapsed B_train = calc_B(train_systems)
 dB_time = @time @elapsed dB_train = calc_dB(train_systems)
 B_test = calc_B(test_systems)
@@ -146,8 +146,8 @@ f_test_pred = dB_test * β
 f_test_pred_v = collect(eachcol(reshape(f_test_pred, 3, :)))
 
 
-# Calculate errors #############################################################
-function compute_errors(x_pred, x)
+# Calculate metrics ############################################################
+function calc_metrics(x_pred, x)
     x_mae = sum(abs.(x_pred .- x)) / length(x)
     x_mre = mean(abs.((x_pred .- x) ./ x))
     x_rmse = sqrt(sum((x_pred .- x).^2) / length(x))
@@ -155,10 +155,10 @@ function compute_errors(x_pred, x)
     return x_mae, x_mre, x_rmse, x_rsq
 end
 
-e_train_mae, e_train_mre, e_train_rmse, e_train_rsq = compute_errors(e_train_pred, e_train)
-f_train_mae, f_train_mre, f_train_rmse, f_train_rsq = compute_errors(f_train_pred, f_train)
-e_test_mae, e_test_mre, e_test_rmse, e_test_rsq = compute_errors(e_test_pred, e_test)
-f_test_mae, f_test_mre, f_test_rmse, f_test_rsq = compute_errors(f_test_pred, f_test)
+e_train_mae, e_train_mre, e_train_rmse, e_train_rsq = calc_metrics(e_train_pred, e_train)
+f_train_mae, f_train_mre, f_train_rmse, f_train_rsq = calc_metrics(f_train_pred, f_train)
+e_test_mae, e_test_mre, e_test_rmse, e_test_rsq = calc_metrics(e_test_pred, e_test)
+f_test_mae, f_test_mre, f_test_rmse, f_test_rsq = calc_metrics(f_test_pred, f_test)
 
 f_test_cos = dot.(f_test_v, f_test_pred_v) ./ (norm.(f_test_v) .* norm.(f_test_pred_v))
 f_test_mean_cos = mean(f_test_cos)
