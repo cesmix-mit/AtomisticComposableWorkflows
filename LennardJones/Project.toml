@@ -1,7 +1,6 @@
 [deps]
 ACE = "3e8ccfd2-c8b0-11ea-32f1-f3a5990fd77a"
 ACE1 = "e3f9bc04-086e-409a-ba78-e9769fe067bb"
-Atomistic = "3e762ff9-b8d8-45cf-a902-edcbc7124e71"
 AtomsBase = "a963bdd2-2df7-4f54-a1ee-49d51e6be12a"
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 DPP = "2673d5e8-682c-11e9-2dfd-471b09c6c819"
