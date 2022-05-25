@@ -1,6 +1,6 @@
 ## This function runs an MD trajectory using the ACE potential with potential file saved at 
 ## file_dir\parameters.ace, using LAMMPS.jl see LAMMPS documentation for more information about 
-## particular commands
+## particular commands.
 
 using LAMMPS
 function run_md(Tend::Int, file_dir::String, save_dir::String; seed = 1, Temp = 0.5, dt = 0.001, dT = 10)

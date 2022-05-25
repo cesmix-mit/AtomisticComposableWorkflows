@@ -1,0 +1,9 @@
+{
+    "config": [
+        "pair_style eam/fs \n", 
+        "pair_coeff * * eam/fs Na_v2.eam.fs Na\n"
+    ], 
+    "filename": "./Na_v2.eam.fs", 
+    "species": ["Na"], 
+    "element": "Na"
+}
