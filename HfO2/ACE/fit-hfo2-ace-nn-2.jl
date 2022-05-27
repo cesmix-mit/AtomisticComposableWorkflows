@@ -11,6 +11,7 @@ using Unitful
 using Flux
 using Flux.Data: DataLoader
 using Zygote
+using ForwardDiff
 using BSON: @save
 using CUDA
 using BenchmarkTools
@@ -18,12 +19,12 @@ using Plots
 
 # Load input parameters ########################################################
 if size(ARGS, 1) == 0
-    #input = ["fit-hfo2-ace-nn/", "data/", "HfO2_cpmd_train_0_94_11.xyz",
-    #         "1800", "3", "3", "1", "5", "1", "1", "1", "1"]
-    #input = ["fit-ahfo2-ace-nn/", "data/", "a-Hfo2-300K-NVT.extxyz",
-    #         "100", "2", "3", "1", "5", "1", "1", "1", "1"]
-    input = ["fit-ahfo2-ace-nn/", "data/", "HfO2_cpmd_train_0_94_11.xyz",
+    #input = ["fit-hfo2-ace-nn-2/", "data/", "HfO2_cpmd_train_0_94_11.xyz",
+    #         "100", "3", "3", "1", "5", "1", "1", "1", "1"]
+    input = ["fit-ahfo2-ace-nn-2/", "data/", "a-Hfo2-300K-NVT.extxyz",
              "100", "2", "3", "1", "5", "1", "1", "1", "1"]
+    #input = ["fit-ahfo2-ace-nn-2/", "data/", "HfO2_cpmd_train_0_94_11.xyz",
+    #         "100", "3", "3", "1", "5", "1", "1", "1", "1"]
 else
     input = ARGS
 end
@@ -115,26 +116,26 @@ f_ref = 1 #maximum(abs.(f_train))
 B_ref = 1 #maximum([maximum(abs.(b)) for b in B_train])
 dB_ref = 1 #maximum([maximum(abs.(db)) for db in dB_train])
 
-bs_train_e = floor(Int, length(B_train) * 0.10)
+bs_train_e = floor(Int, length(B_train) * 0.05)
 train_loader_e   = DataLoader((B_train / B_ref, e_train / e_ref),
                                batchsize=bs_train_e, shuffle=true)
-bs_train_f = floor(Int, length(dB_train) * 0.10)
+bs_train_f = floor(Int, length(dB_train) * 0.05)
 train_loader_f   = DataLoader((B_train_ext / B_ref,
                                dB_train / dB_ref,
                                f_train / f_ref),
                                batchsize=bs_train_f, shuffle=true)
-println("batchsize_e:", bs_train_e, "batchsize_f:", bs_train_f)
+println("batchsize_e:", bs_train_e, ", batchsize_f:", bs_train_f)
 
 
-bs_test_e = floor(Int, length(B_test) * 0.10)
-train_loader_e   = DataLoader((B_test / B_ref, e_test / e_ref),
+bs_test_e = floor(Int, length(B_test) * 0.05)
+test_loader_e   = DataLoader((B_test / B_ref, e_test / e_ref),
                                batchsize=bs_test_e, shuffle=true)
-bs_test_f = floor(Int, length(dB_test) * 0.10)
+bs_test_f = floor(Int, length(dB_test) * 0.05)
 test_loader_f   = DataLoader((B_test_ext / B_ref,
                                dB_test / dB_ref,
                                f_test / f_ref),
                                batchsize=bs_test_f, shuffle=true)
-println("batchsize_e:", bs_test_e, "batchsize_f:", bs_test_f)
+println("batchsize_e:", bs_test_e, ", batchsize_f:", bs_test_f)
 
 # Define neural network model ##################################################
 
@@ -167,7 +168,7 @@ function potential_energy(b::Vector, p::NNBasisPotential)
 end
 
 function force(b::Vector, dbdr::Vector, p::NNBasisPotential)
-    dnndb = first(gradient(p.nn, b))
+    dnndb = ForwardDiff.gradient(p.nn, b)
     return -dnndb ⋅ dbdr
 end
 
@@ -181,63 +182,53 @@ n_params = sum(length, Flux.params(model))
 # Define neural network basis potential
 nnbp = NNBasisPotential(nn, nn_params, ibp_params)
 
-# Define loss functions
-w_e = input["e_weight"]; w_f = input["f_weight"] # not needed for now
 
-# Define loss function
-rmse(x_pred, x) = sqrt(sum((x_pred .- x).^2) / length(x))
-loss(es_pred, es, fs_pred, fs) =  w_e * rmse(es_pred, es) + w_f * rmse(fs_pred, fs)
+# Define loss functions
+w_e = input["e_weight"]; w_f = input["f_weight"]
+#rmse(x_pred, x) = sqrt(sum((x_pred .- x).^2) / length(x))
+loss(es_pred, es, fs_pred, fs) =  w_e * Flux.Losses.mae(es_pred, es) +
+                                  w_f * Flux.Losses.mae(fs_pred, fs)
 global_loss(loader_e, loader_f) =
-    sum([loss(potential_energy.(bs_e, nnbp), es, force.(bs_f, dbs_f, nnbp), fs)
-         for (bs_e, es, bs_f, dbs_f, fs) in zip(loader_e, loader_f)]) / 
+    sum([loss(potential_energy.(bs_e, [nnbp]), es, force.(bs_f, dbs_f, [nnbp]), fs)
+         for  ((bs_e, es), (bs_f, dbs_f, fs)) in zip(loader_e, loader_f)]) / 
     (length(loader_e) + length(loader_f))
 
 # Define optimizer
 opt = ADAM(0.001) # ADAM(0.002, (0.9, 0.999)) 
 
-
 end
 
 # Train ########################################################################
-function train(epochs, loader)
+function train(epochs, loader_e, loader_f)
     for epoch in 1:epochs
         # Training of one epoch
-        time = Base.@elapsed 
-        
-        for (ee, ff) in zip(train_loader_e, train_loader_f)
-            bs_e, es = ee
-            bs_f, dbs_f, fs = ff
+        time = Base.@elapsed for ((bs_e, es), (bs_f, dbs_f, fs)) in zip(loader_e, loader_f)
             g = gradient(() -> loss(potential_energy.(bs_e, [nnbp]), es,
-                                    force.(bs_f, dbs_f, [nnbp]), fs),
-                               nn_params)
+                                    force.(bs_f, dbs_f, [nnbp]), fs), nn_params)
             Flux.Optimise.update!(opt, nn_params, g)
         end
-
         global time_fitting += time
         # Report losses and time
         println("Epoch: $(epoch), \
-                 training loss: $(global_loss(train_loader)), \
-                 testing loss: $(global_loss(test_loader)), \
+                 training loss: $(global_loss(train_loader_e, train_loader_f)), \
+                 testing loss: $(global_loss(test_loader_e, test_loader_f)), \
                  time: $(time)")
     end
 end
 
 # Train energies and forces
 println("Training energies and forces...")
-epochs = 6000; train(epochs, train_loader)
+epochs = 50; train(epochs, train_loader_e, train_loader_f)
 
-# Train energies
-#println("Training energies...")
-#epochs = 200; train(epochs, e_train_loader)
 
 write(experiment_path*"params.dat", "$(nn_params)")
 
 
 # Calculate predictions ########################################################
-e_train_pred = nn.(B_train / B_ref) * e_ref
-f_train_pred = nn.(dB_train / dB_ref) * f_ref
-e_test_pred  = nn.(B_test / B_ref) * e_ref
-f_test_pred = nn.(dB_test / dB_ref) * f_ref
+e_train_pred = potential_energy.(B_train / B_ref, [nnbp]) * e_ref
+f_train_pred = force.(B_train_ext / B_ref, dB_train / dB_ref, [nnbp]) * f_ref
+e_test_pred = potential_energy.(B_test / B_ref, [nnbp]) * e_ref
+f_test_pred = force.(B_test_ext / B_ref, dB_test / dB_ref, [nnbp]) * f_ref
 f_test_pred_v = collect(eachcol(reshape(f_test_pred, 3, :)))
 
 
@@ -262,16 +253,16 @@ f_test_mean_cos = mean(f_test_cos)
 # Save results #################################################################
 dataset_filename = input["dataset_filename"]
 write(experiment_path*"results.csv", "dataset,\
-                      n_systems,nn_params,n_body,max_deg,r0,\
-                      rcutoff,wL,csp,e_weight,f_weight,\
+                      n_systems,n_params,n_body,max_deg,r0,\
+                      rcutoff,wL,csp,w_e,w_f,\
                       e_train_mae,e_train_mre,e_train_rmse,e_train_rsq,\
                       f_train_mae,f_train_mre,f_train_rmse,f_train_rsq,\
                       e_test_mae,e_test_mre,e_test_rmse,e_test_rsq,\
                       f_test_mae,f_test_mre,f_test_rmse,f_test_rsq,\
                       f_test_mean_cos,B_time,dB_time,time_fitting
                       $(dataset_filename), \
-                      $(n_systems),$(nn_params),$(n_body),$(max_deg),$(r0),\
-                      $(rcutoff),$(wL),$(csp),$(e_weight),$(f_weight),\
+                      $(n_systems),$(n_params),$(n_body),$(max_deg),$(r0),\
+                      $(rcutoff),$(wL),$(csp),$(w_e),$(w_e),\
                       $(e_train_mae),$(e_train_mre),$(e_train_rmse),$(e_train_rsq),\
                       $(f_train_mae),$(f_train_mre),$(f_train_rmse),$(f_train_rsq),\
                       $(e_test_mae),$(e_test_mre),$(e_test_rmse),$(e_test_rsq),\
@@ -279,12 +270,12 @@ write(experiment_path*"results.csv", "dataset,\
                       $(f_test_mean_cos),$(B_time),$(dB_time),$(time_fitting)")
 
 write(experiment_path*"results-short.csv", "dataset,\
-                      n_systems,nn_params,n_body,max_deg,r0,rcutoff,\
+                      n_systems,n_params,n_body,max_deg,r0,rcutoff,\
                       e_test_mae,e_test_rmse,\
                       f_test_mae,f_test_rmse,\
                       B_time,dB_time,time_fitting
                       $(dataset_filename),\
-                      $(n_systems),$(nn_params),$(n_body),$(max_deg),$(r0),$(rcutoff),\
+                      $(n_systems),$(n_params),$(n_body),$(max_deg),$(r0),$(rcutoff),\
                       $(e_test_mae),$(e_test_rmse),\
                       $(f_test_mae),$(f_test_rmse),\
                       $(B_time),$(dB_time),$(time_fitting)")
