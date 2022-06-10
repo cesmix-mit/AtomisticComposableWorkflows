@@ -129,12 +129,12 @@ println("batchsize_e:", bs_train_e, ", batchsize_f:", bs_train_f)
 
 bs_test_e = 32#floor(Int, length(B_test) * 0.05)
 test_loader_e   = DataLoader((B_test / B_ref, e_test / e_ref),
-                               batchsize=bs_test_e, shuffle=true)
+                              batchsize=bs_test_e, shuffle=true)
 bs_test_f = 32#floor(Int, length(dB_test) * 0.05)
 test_loader_f   = DataLoader((B_test_ext / B_ref,
-                               dB_test / dB_ref,
-                               f_test / f_ref),
-                               batchsize=bs_test_f, shuffle=true)
+                              dB_test / dB_ref,
+                              f_test / f_ref),
+                              batchsize=bs_test_f, shuffle=true)
 println("batchsize_e:", bs_test_e, ", batchsize_f:", bs_test_f)
 
 # Define neural network model ##################################################
@@ -165,32 +165,63 @@ function force(A::AbstractSystem,
 end
 
 function potential_energy(b::Vector, p::NNBasisPotential)
-    return p.nn(b)
+    return sum(p.nn(b))
 end
 
-function gradnn(nn_params, x0)
-    dsdy(x) = x>=0 ? 1 : 0
-    y = 1; x = x0
-    n_layers = length(nn_params) ÷ 2
-    for i in 1:2:3
-        y *= dsdy.(x) .* nn_params[i]'
-        x = Flux.relu.(nn_params[i] * x + nn_params[i+1])
-    end
-    return y
-end
+#function gradnn(nn_params, x0)
+#    dsdy(x) = x>=0 ? 1 : 0
+#    y = 1; x = x0
+#    n_layers = length(nn_params) ÷ 2
+#    for i in 1:2:2n_layers-1
+#        y *= dsdy.(x) .* nn_params[i]'
+#        x = Flux.relu.(nn_params[i] * x + nn_params[i+1])
+#    end
+#    return y
+#end
+
+
+#function force(b::Vector, dbdr::Vector, p::NNBasisPotential)
+#    dnndb = ForwardDiff.gradient(p.nn, b)
+#    return dnndb ⋅ dbdr
+#end
 
 function force(b::Vector, dbdr::Vector, p::NNBasisPotential)
-    #dnndb = ForwardDiff.gradient(p.nn, b)
-    dnndb = gradnn(p.nn_params, b)
+    y, pullback = Zygote.pullback(p.nn, b)
+    dnndb = pullback(ones(size(y)))[1]
     return dnndb ⋅ dbdr
 end
 
+
+#function force(b::Vector, dbdr::Vector, p::NNBasisPotential)
+#    #dnndb = gradient(p.nn, b)
+#    dnndb = gradnn2(b)
+#    #dnndb = (ps) -> gradient(nn, b)[1]
+#    return dnndb ⋅ dbdr
+#end
+
+
+#function force(b::Vector, dbdr::Vector, p::NNBasisPotential)
+#    dnndb = ForwardDiff.gradient(x -> re(pp)(x)[1], b)
+#    return dnndb ⋅ dbdr
+#end
+
+#function force(b::Vector, dbdr::Vector, p::NNBasisPotential)
+#    dsdy(x) = x>=0 ? 1 : 0 # Flux.sigmoid(x) * (1 - Flux.sigmoid(x))
+#    dnndb = 1; x = b
+#    n_layers = length(nn_params) ÷ 2
+#    for i in 1:2:2n_layers-1
+#        dnndb *= dsdy.(x) .* nn_params[i]'
+#        x = Flux.relu.(nn_params[i] * x + nn_params[i+1])
+#    end
+#    return dnndb ⋅ dbdr
+#end
+
+
 # Define neural network model
 n_desc = length(first(train_loader_e)[1][1])
-model = Chain(Dense(n_desc,64,Flux.relu), Dense(64,1))
-nn(b) = sum(model(b))
-nn_params = Flux.params(model)
-n_params = sum(length, Flux.params(model))
+nn = Chain(Dense(n_desc,32,Flux.relu), Dense(32,32,Flux.relu), Dense(32,1))
+nn_params = Flux.params(nn)
+n_params = sum(length, Flux.params(nn))
 
 # Define neural network basis potential
 nnbp = NNBasisPotential(nn, nn_params, ibp_params)
@@ -270,10 +301,14 @@ end
 
 # Train energies and forces
 println("Training energies and forces...")
-opt = ADAM(0.0001)
-epochs = 100000; train_e(epochs, train_loader_e)
-opt = ADAM(0.01)
-epochs = 20; train_f(epochs, train_loader_f)
+#opt = ADAM(0.00001)
+#epochs = 1e6; train(epochs, train_loader_e, train_loader_f)
+
+#opt = ADAM(0.001)
+#epochs = 10000; train_e(epochs, train_loader_e)
+
+opt = ADAM(0.001)
+epochs = 3; train_f(epochs, train_loader_f)
 
 write(experiment_path*"params.dat", "$(nn_params)")
 
