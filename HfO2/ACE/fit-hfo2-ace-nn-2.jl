@@ -181,15 +181,18 @@ end
 #    https://discourse.julialang.org/t/issue-with-zygote-over-forwarddiff-derivative/70824
 #    https://github.com/FluxML/Zygote.jl/issues/953#issuecomment-841882071
 
-function grad_mlp(nn_params, b0)
-    dsdb(x) = Flux.σ(x) * (1 - Flux.σ(x)) # x>=0 ? 1 : 0 
-    grad = 1; b = b0
+function grad_mlp(nn_params, x0)
+    dsdy(x) = x>0 ? 1 : 0 # Flux.σ(x) * (1 - Flux.σ(x))
+    prod = 1; x = x0
     n_layers = length(nn_params) ÷ 2
-    for i in 1:2:2n_layers-1
-        grad *= dsdb.(b) .* nn_params[i]'
-        b = Flux.σ.(nn_params[i] * b + nn_params[i+1])
+    for i in 1:2:2(n_layers-1)-1  # i : 1, 3
+        y = nn_params[i] * x + nn_params[i+1]
+        x = Flux.relu.(y)
+        prod = dsdy.(y) .* nn_params[i] * prod
     end
-    return grad
+    i = 2(n_layers)-1 
+    prod = nn_params[i] * prod
+    return prod
 end
 
 function force(b::Vector, dbdr::Vector, p::NNBasisPotential)
@@ -227,10 +230,16 @@ end
 #    return dnndb ⋅ dbdr
 #end
 
+#function force(b::Vector, dbdr::Vector,  ps::Vector, re)
+#    y, pullback = Zygote.pullback(re(ps), b)
+#    dnndb = pullback(ones(size(y)))[1]
+#    return dnndb ⋅ dbdr
+#end
+
 
 # Define neural network model
 n_desc = length(first(train_loader_e)[1][1])
-nn = Chain(Dense(n_desc,32,Flux.sigmoid), Dense(32,32,Flux.sigmoid), Dense(32,1,Flux.sigmoid))
+nn = Chain(Dense(n_desc,32,Flux.relu), Dense(32,32,Flux.relu), Dense(32,1))
 nn_params = Flux.params(nn)
 n_params = sum(length, Flux.params(nn))
 
@@ -290,13 +299,12 @@ opt = ADAM(0.001) # opt = ADAM(0.002, (0.9, 0.999))
 #    end
 #end
 
-
 function train_f(epochs, loader_f)
     ps, re = Flux.destructure(nnbp.nn)
     for epoch in 1:epochs
         # Training of one epoch
         time = Base.@elapsed for (bs_f, dbs_f, fs) in loader_f
-            #g = gradient(() -> Flux.Losses.mae(force.(bs_f, dbs_f, [ps], [re]), fs), ps)
+#            g = gradient(() -> Flux.Losses.mae(force.(bs_f, dbs_f, [ps], [re]), fs), Flux.params(ps))
             g = gradient(Flux.params(ps)) do
                   Flux.Losses.mae(force.(bs_f, dbs_f, [ps], [re]), fs)
             end
