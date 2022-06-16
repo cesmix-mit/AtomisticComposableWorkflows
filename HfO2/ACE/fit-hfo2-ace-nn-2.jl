@@ -116,10 +116,10 @@ f_ref = 1 #maximum(abs.(f_train))
 B_ref = 1 #maximum([maximum(abs.(b)) for b in B_train])
 dB_ref = 1 #maximum([maximum(abs.(db)) for db in dB_train])
 
-bs_train_e = 30#floor(Int, length(B_train) * 0.05)
+bs_train_e = 32#floor(Int, length(B_train) * 0.025)
 train_loader_e   = DataLoader((B_train / B_ref, e_train / e_ref),
                                batchsize=bs_train_e, shuffle=true)
-bs_train_f = 30#floor(Int, length(dB_train) * 0.05)
+bs_train_f = 32#floor(Int, length(dB_train) * 0.025)
 train_loader_f   = DataLoader((B_train_ext / B_ref,
                                dB_train / dB_ref,
                                f_train / f_ref),
@@ -127,10 +127,10 @@ train_loader_f   = DataLoader((B_train_ext / B_ref,
 println("batchsize_e:", bs_train_e, ", batchsize_f:", bs_train_f)
 
 
-bs_test_e = 30#floor(Int, length(B_test) * 0.05)
+bs_test_e = 32#floor(Int, length(B_test) * 0.05)
 test_loader_e   = DataLoader((B_test / B_ref, e_test / e_ref),
                               batchsize=bs_test_e, shuffle=true)
-bs_test_f = 30#floor(Int, length(dB_test) * 0.05)
+bs_test_f = 32#floor(Int, length(dB_test) * 0.05)
 test_loader_f   = DataLoader((B_test_ext / B_ref,
                               dB_test / dB_ref,
                               f_test / f_ref),
@@ -186,12 +186,12 @@ end
 #    https://github.com/FluxML/Zygote.jl/issues/953#issuecomment-841882071
 
 function grad_mlp(nn_params, x0)
-    dsdy(x) = x>0 ? 1 : 0  # Flux.σ(x) * (1 - Flux.σ(x))
+    dsdy(x) = x>0 ? 1 : 0 #Flux.σ(x) * (1 - Flux.σ(x))  
     prod = 1; x = x0
     n_layers = length(nn_params) ÷ 2
     for i in 1:2:2(n_layers-1)-1  # i : 1, 3
         y = nn_params[i] * x + nn_params[i+1]
-        x = Flux.relu.(y)
+        x =  Flux.relu.(y) #Flux.σ.(y)
         prod = dsdy.(y) .* nn_params[i] * prod
     end
     i = 2(n_layers)-1 
@@ -242,7 +242,7 @@ end
 
 # Define neural network model
 n_desc = length(first(train_loader_e)[1][1])
-nn = Chain(Dense(n_desc,64,Flux.relu), Dense(64,1))
+nn = Chain(Dense(n_desc,32,Flux.relu), Dense(32,32,Flux.relu), Dense(32,1))
 nn_params = Flux.params(nn)
 n_params = sum(length, Flux.params(nn))
 
@@ -252,9 +252,8 @@ nnbp = NNBasisPotential(nn, nn_params, ibp_params)
 
 # Define loss functions
 w_e = input["e_weight"]; w_f = input["f_weight"]
-#rmse(x_pred, x) = sqrt(sum((x_pred .- x).^2) / length(x))
-loss(es_pred, es, fs_pred, fs) =  w_e * Flux.Losses.mae(es_pred, es) +
-                                  w_f * Flux.Losses.mae(fs_pred, fs)
+loss(es_pred, es, fs_pred, fs) =  w_e * Flux.Losses.mse(es_pred, es) +
+                                  w_f * Flux.Losses.mse(fs_pred, fs)
 global_loss(loader_e, loader_f, ps, re) =
     mean([loss(potential_energy.(bs_e, [ps], [re]), es, force.(bs_f, dbs_f, [ps], [re]), fs)
           for ((bs_e, es), (bs_f, dbs_f, fs)) in zip(loader_e, loader_f)])
@@ -278,10 +277,18 @@ opt = ADAM(0.001) # opt = ADAM(0.002, (0.9, 0.999))
 #        end
 #        global time_fitting += time
 #        # Report losses and time
+#        training_loss_e = mean([Flux.Losses.mae(potential_energy.(bs_e, [ps], [re]), es)
+#                              for (bs_e, es) in train_loader_e])
+#        training_loss_f = mean([Flux.Losses.mae(force.(bs_f, dbs_f, [ps], [re]), fs)
+#                             for (bs_f, dbs_f, fs) in test_loader_f])
 #        println("Epoch: $(epoch), \
-#                 training loss: $(global_loss(train_loader_e, train_loader_f, ps, re)), \
-#                 testing loss: $(global_loss(test_loader_e, test_loader_f, ps, re)), \
+#                 training loss e: $(training_loss_e), \
+#                 training loss f: $(training_loss_f), \
 #                 time: $(time)")
+##        println("Epoch: $(epoch), \
+##                 training loss: $(global_loss(train_loader_e, train_loader_f, ps, re)), \
+##                 testing loss: $(global_loss(test_loader_e, test_loader_f, ps, re)), \
+##                 time: $(time)")
 #    end
 #    nnbp.nn = re(ps)
 #    nnbp.nn_params = Flux.params(nnbp.nn)
@@ -321,34 +328,33 @@ opt = ADAM(0.001) # opt = ADAM(0.002, (0.9, 0.999))
 #    nnbp.nn_params = Flux.params(nnbp.nn)
 #end
 
-#function train_e(epochs, loader_e)
-#    for epoch in 1:epochs
-#        # Training of one epoch
-#        time = Base.@elapsed for (bs_e, es) in loader_e
-#            g = gradient(() -> Flux.Losses.mae(potential_energy.(bs_e, [nnbp]), es), nnbp.nn_params)
-#            Flux.Optimise.update!(opt, nnbp.nn_params, g)
-#        end
-#        global time_fitting += time
-#        # Report losses and time
-#        training_loss = mean([Flux.Losses.mae(potential_energy.(bs_e, [nnbp]), es)
-#                              for (bs_e, es) in train_loader_e])
-#        testing_loss = mean([Flux.Losses.mae(potential_energy.(bs_e, [nnbp]), es)
-#                             for (bs_e, es) in test_loader_e])
-#        println("Epoch: $(epoch), \
-#                 training loss: $(training_loss), \
-#                 testing loss: $(testing_loss), \
-#                 time: $(time)")
-#    end
-#end
+function train_e(epochs, loader_e, c)
+    for epoch in 1:epochs
+        # Training of one epoch
+        time = Base.@elapsed for (bs_e, es) in loader_e
+            g = gradient(() -> Flux.Losses.mae(potential_energy.(bs_e, [nnbp]), c*es), nnbp.nn_params)
+            Flux.Optimise.update!(opt, nnbp.nn_params, g)
+        end
+        global time_fitting += time
+        # Report losses and time
+        training_loss = mean([Flux.Losses.mae(potential_energy.(bs_e, [nnbp]), es)
+                              for (bs_e, es) in train_loader_e])
+        testing_loss = mean([Flux.Losses.mae(potential_energy.(bs_e, [nnbp]), es)
+                             for (bs_e, es) in test_loader_e])
+        println("Epoch: $(epoch), \
+                 training loss: $(training_loss), \
+                 testing loss: $(testing_loss), \
+                 time: $(time)")
+    end
+end
 
-function train_f(epochs, loader_f)
+function train_f(epochs, loader_f, c)
     ps, re = Flux.destructure(nnbp.nn)
     for epoch in 1:epochs
         # Training of one epoch
         time = Base.@elapsed for (bs_f, dbs_f, fs) in loader_f
-#            g = gradient(() -> Flux.Losses.mae(force.(bs_f, dbs_f, [ps], [re]), fs), Flux.params(ps))
             g = gradient(Flux.params(ps)) do
-                  Flux.Losses.mse(force.(bs_f, dbs_f, [ps], [re]), fs)
+                  Flux.Losses.mse(force.(bs_f, dbs_f, [ps], [re]), c*fs)
             end
             Flux.Optimise.update!(opt, Flux.params(ps), g)
         end
@@ -356,8 +362,8 @@ function train_f(epochs, loader_f)
         # Report losses and time
         training_loss = mean([Flux.Losses.mae(force.(bs_f, dbs_f, [ps], [re]), fs)
                               for (bs_f, dbs_f, fs) in train_loader_f])
-        testing_loss = mean([Flux.Losses.mae(force.(bs_f, dbs_f, [ps], [re]), fs)
-                             for (bs_f, dbs_f, fs) in test_loader_f])
+        testing_loss = 0.0#mean([Flux.Losses.mae(force.(bs_f, dbs_f, [ps], [re]), fs)
+                       #      for (bs_f, dbs_f, fs) in test_loader_f])
         println("Epoch: $(epoch), \
                  training loss: $(training_loss), \
                  testing loss: $(testing_loss), \
@@ -369,12 +375,28 @@ end
 
 # Train energies and forces
 println("Training energies and forces...")
-opt = ADAM(0.001)
 
-#epochs = 10000; train(epochs, train_loader_e, train_loader_f)
+# Training strategy 1
+epochs = 10; opt = ADAM(0.01); train_f(epochs, train_loader_f, 1)
+
+# Training strategy 2
+#epochs = 5e4; opt = ADAM(0.001); train_e(epochs, train_loader_e, 1)
+#epochs = 1e5; opt = ADAM(0.0001); train_e(epochs, train_loader_e, 1)
+#pse, ree = Flux.destructure(nnbp.nn)
+#epochs = 5; opt = ADAM(0.001); train_f(epochs, train_loader_f, 1)
+#psf, ref = Flux.destructure(nnbp.nn)
+#nn = ree(0.5pse+0.5ppf)
+#nn_params = Flux.params(nn)
+#n_params = sum(length, Flux.params(nn))
+#nnbp = NNBasisPotential(nn, nn_params, ibp_params)
+
+# Misc
+#opt = ADAM(0.001); w_e = 1; w_f = 0.00001; epochs = 100; train(epochs, train_loader_e, train_loader_f)
 #epochs = 20; train_ef(epochs, train_loader_e, train_loader_f)
-# epochs = 10000; train_e(epochs, train_loader_e)
-epochs = 100; train_f(epochs, train_loader_f)
+#epochs = 1e6; opt = ADAM(0.00001); train_e(epochs, train_loader_e)
+#epochs = 10; train_f(epochs, train_loader_f)
+#epochs = 100; opt = ADAM(0.001); train_f(epochs, train_loader_f)
+
 
 
 write(experiment_path*"params.dat", "$(nn_params)")
@@ -436,16 +458,20 @@ write(experiment_path*"results-short.csv", "dataset,\
                       $(f_test_mae),$(f_test_rmse),\
                       $(B_time),$(dB_time),$(time_fitting)")
 
-e = plot( e_test, e_test_pred, seriestype = :scatter, markerstrokewidth=0,
-          label="", xlabel = "E DFT | eV/atom", ylabel = "E predicted | eV/atom")
-savefig(e, experiment_path*"e_test.png")
+r0 = minimum(e_test); r1 = maximum(e_test); rs = (r1-r0)/10
+plot( e_test, e_test_pred, seriestype = :scatter, markerstrokewidth=0,
+      label="", xlabel = "E DFT | eV/atom", ylabel = "E predicted | eV/atom")
+#plot!( r0:rs:r1, r0:rs:r1, label="")
+savefig(experiment_path*"e_test.png")
 
-f = plot( norm.(f_test_v), norm.(f_test_pred_v), seriestype = :scatter, markerstrokewidth=0,
-          label="", xlabel = "|F| DFT | eV/Å", ylabel = "|F| predicted | eV/Å",
-          xlims=(0, 4), ylims=(0,4))
-savefig(f, experiment_path*"f_test.png")
+r0 = 0; r1 = ceil(maximum(norm.(f_test_v)))
+plot( norm.(f_test_v), norm.(f_test_pred_v), seriestype = :scatter, markerstrokewidth=0,
+      label="", xlabel = "|F| DFT | eV/Å", ylabel = "|F| predicted | eV/Å", 
+      xlims = (r0, r1), ylims = (r0, r1))
+plot!( r0:r1, r0:r1, label="")
+savefig(experiment_path*"f_test.png")
 
-c = plot( f_test_cos, seriestype = :scatter, markerstrokewidth=0,
-          label="", xlabel = "F DFT vs F predicted", ylabel = "cos(α)")
-savefig(c, experiment_path*"f_test_cos.png")
+plot( f_test_cos, seriestype = :scatter, markerstrokewidth=0,
+      label="", xlabel = "F DFT vs F predicted", ylabel = "cos(α)")
+savefig(experiment_path*"f_test_cos.png")
 
