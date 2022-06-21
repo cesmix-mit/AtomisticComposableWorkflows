@@ -4,7 +4,7 @@ using IterTools
 experiments = "experiments/"
 
 # Fitting program
-juliafile = "fit-hfo2-ace.jl"
+juliafile = "fit-ahfo2-ace.jl"
 
 # Parameter definitions ########################################################
 

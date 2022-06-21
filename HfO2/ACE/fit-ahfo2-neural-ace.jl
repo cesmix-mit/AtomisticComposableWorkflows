@@ -22,11 +22,11 @@ using Plots
 
 # Load input parameters ########################################################
 if size(ARGS, 1) == 0
-    #input = ["fit-hfo2-ace-nn-2/", "data/", "HfO2_cpmd_train_0_94_11.xyz",
+    #input = ["fit-ahfo2-neural-ace/", "data/", "a-Hfo2-300K-NVT.extxyz",
     #         "100", "3", "3", "1", "5", "1", "1", "1", "1"]
-    input = ["fit-ahfo2-ace-nn-2/", "data/", "a-Hfo2-300K-NVT.extxyz",
+    input = ["fit-ahfo2-neural-ace/", "data/", "a-Hfo2-300K-NVT.extxyz",
              "100", "2", "3", "1", "5", "1", "1", "1", "1"]
-    #input = ["fit-ahfo2-ace-nn-2/", "data/", "HfO2_cpmd_train_0_94_11.xyz",
+    #input = ["fit-ahfo2-neural-ace/", "data/", "a-Hfo2-300K-NVT.extxyz",
     #         "100", "3", "3", "1", "5", "1", "1", "1", "1"]
 else
     input = ARGS
@@ -120,7 +120,7 @@ f_ref = 1 #maximum(abs.(f_train))
 B_ref = 1 #maximum([maximum(abs.(b)) for b in B_train])
 dB_ref = 1 #1/B_ref
 
-bs_train_e = floor(Int, length(B_train) * 0.5) # 0.025
+bs_train_e = floor(Int, length(B_train) * 0.5 ) # 0.5, 0.025
 train_loader_e   = DataLoader((B_train / B_ref, e_train / e_ref),
                                batchsize=bs_train_e, shuffle=true)
 bs_train_f = floor(Int, length(dB_train) * 0.025) # 0.025
@@ -253,8 +253,8 @@ nnbp = NNBasisPotential(nn, nn_params, ibp_params)
 
 # Define loss functions
 w_e = input["e_weight"]; w_f = input["f_weight"]
-loss(es_pred, es, fs_pred, fs) =  w_e * Flux.Losses.mse(es_pred, es) +
-                                  w_f * Flux.Losses.mse(fs_pred, fs)
+loss(es_pred, es, fs_pred, fs) =  w_e * Flux.Losses.mae(es_pred, es) +
+                                  w_f * Flux.Losses.mae(fs_pred, fs)
 global_loss(loader_e, loader_f, ps, re) =
     mean([loss(potential_energy.(bs_e, [ps], [re]), es, force.(bs_f, dbs_f, [ps], [re]), fs)
           for ((bs_e, es), (bs_f, dbs_f, fs)) in zip(loader_e, loader_f)])
@@ -267,25 +267,31 @@ end
 
 println("Training energies and forces...")
 
-# Training using Flux.jl default
-#epochs = 1
+# Training using ADAM from Flux.jl
+#epochs = 5_000
 #opt = ADAM(0.001) # opt = ADAM(0.002, (0.9, 0.999)) 
 #ps, re = Flux.destructure(nnbp.nn)
 #for epoch in 1:epochs
 #    global time_fitting += Base.@elapsed for ((bs_e, es), (bs_f, dbs_f, fs)) in
 #                                              zip(train_loader_e, train_loader_f)
 #        g = gradient(Flux.params(ps)) do
-#            loss(potential_energy.(bs_e, [ps], [re]), es,
-#                force.(bs_f, dbs_f, [ps], [re]), fs)
+#            #loss(potential_energy.(bs_e, [ps], [re]), es,
+#            #     force.(bs_f, dbs_f, [ps], [re]), fs)
+#            Flux.Losses.mae(potential_energy.(bs_e, [ps], [re]), es)
 #        end
 #        Flux.Optimise.update!(opt, Flux.params(ps), g)
 #    end
 #    
 #    # Report losses and time
-#    training_loss = mean([Flux.Losses.mae(force.(bs_f, dbs_f, [ps], [re]), fs)
-#                          for (bs_f, dbs_f, fs) in train_loader_f])
-#    testing_loss = mean([Flux.Losses.mae(force.(bs_f, dbs_f, [ps], [re]), fs)
-#                         for (bs_f, dbs_f, fs) in test_loader_f])
+#    training_loss = mean([Flux.Losses.mae(potential_energy.(bs_e, [ps], [re]), es)
+#                          for (bs_e, es) in train_loader_e])
+#    testing_loss = mean([Flux.Losses.mae(potential_energy.(bs_e, [ps], [re]), es)
+#                         for (bs_e, es) in test_loader_e])
+#    
+##    training_loss = mean([Flux.Losses.mae(force.(bs_f, dbs_f, [ps], [re]), fs)
+##                          for (bs_f, dbs_f, fs) in train_loader_f])
+##    testing_loss = mean([Flux.Losses.mae(force.(bs_f, dbs_f, [ps], [re]), fs)
+##                         for (bs_f, dbs_f, fs) in test_loader_f])
 #    println("Epoch: $(epoch), \
 #             training loss: $(training_loss), \
 #             testing loss: $(testing_loss), \
@@ -294,12 +300,13 @@ println("Training energies and forces...")
 #nnbp.nn = re(ps)
 #nnbp.nn_params = Flux.params(nnbp.nn)
 
-# Training using Optimizer.jl
+
+# Training using BFGS from Optimizer.jl
 time_fitting += Base.@elapsed begin
 ps, re = Flux.destructure(nnbp.nn)
-((bs_e, es), (bs_f, dbs_f, fs)) = first(zip(train_loader_e, train_loader_f))
+((bs_e, es), (bs_f, dbs_f, fs)) = collect(zip(train_loader_e, train_loader_f))[1]
 loss(ps, p) = loss(potential_energy.(bs_e, [ps], [re]), es, 
-                   force.(bs_f, dbs_f, [ps], [re]), fs)
+                   force.(bs_f, dbs_f, [ps], [re]), fs) #fs.^2 .* 
 prob = OptimizationProblem(loss, ps, [])
 dlossdps = OptimizationFunction(loss, Optimization.AutoForwardDiff())
 prob = OptimizationProblem(dlossdps, ps, [])
@@ -308,6 +315,7 @@ ps = sol.u
 nnbp.nn = re(ps)
 nnbp.nn_params = Flux.params(nnbp.nn)
 end
+
 
 write(experiment_path*"params.dat", "$(nnbp.nn_params)")
 

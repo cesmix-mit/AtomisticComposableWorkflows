@@ -19,8 +19,10 @@ using Plots
 if size(ARGS, 1) == 0
     #input = ["fit-hfo2-ace-nn/", "data/", "HfO2_cpmd_train_0_94_11.xyz",
     #         "1800", "3", "3", "1", "5", "1", "1", "1", "1"]
-    input = ["fit-ahfo2-ace-nn/", "data/", "a-Hfo2-300K-NVT.extxyz",
-             "100", "3", "3", "1", "5", "1", "1", "1", "1"]
+    #input = ["fit-ahfo2-ace-nn/", "data/", "a-Hfo2-300K-NVT.extxyz",
+    #         "100", "2", "3", "1", "5", "1", "1", "1", "1"]
+    input = ["fit-ahfo2-ace-nn/", "data/", "HfO2_cpmd_train_0_94_11.xyz",
+             "100", "2", "3", "1", "5", "1", "1", "1", "1"]
 else
     input = ARGS
 end
