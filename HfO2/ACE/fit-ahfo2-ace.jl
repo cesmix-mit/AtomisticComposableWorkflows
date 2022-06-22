@@ -18,7 +18,9 @@ if size(ARGS, 1) == 0
     #input = ["fit-ahfo2-ace/", "data/", "a-Hfo2-300K-NVT.extxyz",
     #         "100", "2", "3", "1", "5", "1", "1", "1", "1"]
     input = ["fit-ahfo2-ace/", "data/", "a-Hfo2-300K-NVT.extxyz",
-             "100", "5", "5", "1", "5", "1", "1", "1", "1"]
+             "100", "3", "3", "1", "5", "1", "1", "1", "10"]
+    #input = ["fit-ahfo2-ace/", "data/", "a-Hfo2-300K-NVT.extxyz",
+    #         "100", "5", "5", "1", "5", "1", "1", "1", "1"]
 else
     input = ARGS
 end
@@ -74,7 +76,7 @@ write(experiment_path*"e_test.dat", "$(e_test)")
 write(experiment_path*"f_test.dat", "$(f_test)")
 
 
-# Define RPI parameters ########################################################
+# Define ACE parameters ########################################################
 n_body = input["n_body"]
 max_deg = input["max_deg"]
 r0 = input["r0"]
@@ -82,15 +84,15 @@ rcutoff = input["rcutoff"]
 wL = input["wL"]
 csp = input["csp"]
 atomic_symbols = unique(atomic_symbol(systems[1]))
-rpi_params = RPIParams(atomic_symbols, n_body, max_deg, wL, csp, r0, rcutoff)
-write(experiment_path*"rpi_params.dat", "$(rpi_params)")
+ibp_params = ACEParams(atomic_symbols, n_body, max_deg, wL, csp, r0, rcutoff)
+write(experiment_path*"ibp_params.dat", "$(ibp_params)")
 
 
 # Calculate descriptors ########################################################
-calc_B(sys) = vcat((evaluate_basis.(sys, [rpi_params])'...))
+calc_B(sys) = vcat((evaluate_basis.(sys, [ibp_params])'...))
 calc_dB(sys) =
-    vcat([vcat(d...) for d in evaluate_basis_d.(sys, [rpi_params])]...)
-    #vcat([vcat(d...) for d in ThreadsX.collect(evaluate_basis_d(s, rpi_params) for s in sys)]...)
+    vcat([vcat(d...) for d in evaluate_basis_d.(sys, [ibp_params])]...)
+    #vcat([vcat(d...) for d in ThreadsX.collect(evaluate_basis_d(s, ibp_params) for s in sys)]...)
 B_time = @time @elapsed B_train = calc_B(train_systems)
 dB_time = @time @elapsed dB_train = calc_dB(train_systems)
 B_test = calc_B(test_systems)
@@ -196,15 +198,20 @@ write(experiment_path*"results-short.csv", "dataset,\
                       $(f_test_mae),$(f_test_rmse),\
                       $(B_time),$(dB_time),$(time_fitting)")
 
-e = plot( e_test, e_test_pred, seriestype = :scatter, markerstrokewidth=0,
-          label="", xlabel = "E DFT | eV/atom", ylabel = "E predicted | eV/atom")
-savefig(e, experiment_path*"e_test.png")
+r0 = minimum(e_test); r1 = maximum(e_test); rs = (r1-r0)/10
+plot( e_test, e_test_pred, seriestype = :scatter, markerstrokewidth=0,
+      label="", xlabel = "E DFT | eV/atom", ylabel = "E predicted | eV/atom")
+plot!( r0:rs:r1, r0:rs:r1, label="")
+savefig(experiment_path*"e_test.png")
 
-f = plot( norm.(f_test_v), norm.(f_test_pred_v), seriestype = :scatter, markerstrokewidth=0,
-          label="", xlabel = "|F| DFT | eV/Å", ylabel = "|F| predicted | eV/Å")
-savefig(f, experiment_path*"f_test.png")
+r0 = 0; r1 = ceil(maximum(norm.(f_test_v)))
+plot( norm.(f_test_v), norm.(f_test_pred_v), seriestype = :scatter, markerstrokewidth=0,
+      label="", xlabel = "|F| DFT | eV/Å", ylabel = "|F| predicted | eV/Å", 
+      xlims = (r0, r1), ylims = (r0, r1))
+plot!( r0:r1, r0:r1, label="")
+savefig(experiment_path*"f_test.png")
 
-c = plot( f_test_cos, seriestype = :scatter, markerstrokewidth=0,
-          label="", xlabel = "F DFT vs F predicted", ylabel = "cos(α)")
-savefig(c, experiment_path*"f_test_cos.png")
+plot( f_test_cos, seriestype = :scatter, markerstrokewidth=0,
+      label="", xlabel = "F DFT vs F predicted", ylabel = "cos(α)")
+savefig(experiment_path*"f_test_cos.png")
 
