@@ -18,7 +18,7 @@ if size(ARGS, 1) == 0
     #input = ["fit-ahfo2-ace/", "data/", "a-Hfo2-300K-NVT.extxyz",
     #         "100", "2", "3", "1", "5", "1", "1", "1", "1"]
     input = ["fit-ahfo2-ace/", "data/", "a-Hfo2-300K-NVT.extxyz",
-             "100", "3", "3", "1", "5", "1", "1", "1", "10"]
+             "100", "3", "3", "1", "5", "1", "1", "1", "1"]
     #input = ["fit-ahfo2-ace/", "data/", "a-Hfo2-300K-NVT.extxyz",
     #         "100", "5", "5", "1", "5", "1", "1", "1", "1"]
 else
