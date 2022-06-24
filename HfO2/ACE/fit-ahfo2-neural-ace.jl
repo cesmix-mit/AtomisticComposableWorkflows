@@ -20,14 +20,17 @@ using CUDA
 using BenchmarkTools
 using Plots
 
+# execute: julia --threads 4 fit-ahfo2-neural-ace.jl
+
+
 # Load input parameters ########################################################
 if size(ARGS, 1) == 0
     #input = ["fit-ahfo2-neural-ace/", "data/", "a-Hfo2-300K-NVT.extxyz",
     #         "100", "3", "3", "1", "5", "1", "1", "1", "1"]
     #input = ["fit-ahfo2-neural-ace/", "data/", "a-Hfo2-300K-NVT.extxyz",
     #         "100", "2", "3", "1", "5", "1", "1", "1", "1"]
-    input = ["fit-ahfo2-neural-ace/", "data/", "a-Hfo2-300K-NVT.extxyz",
-             "100", "3", "3", "1", "5", "1", "1", "50", "50"]
+    input = ["fit-ahfo2-neural-ace-bis/", "data/", "a-Hfo2-300K-NVT.extxyz",
+             "100", "3", "3", "1", "5", "1", "1", "1", "0.01"]
 else
     input = ARGS
 end
@@ -120,10 +123,10 @@ f_ref = 1 #maximum(abs.(f_train))
 B_ref = 1 #maximum([maximum(abs.(b)) for b in B_train])
 dB_ref = 1 #1/B_ref
 
-bs_train_e = floor(Int, length(B_train) * 0.025 ) # 0.5, 0.025
+bs_train_e = floor(Int, length(B_train) * 0.0125 ) # 0.5, 0.025
 train_loader_e   = DataLoader((B_train / B_ref, e_train / e_ref),
                                batchsize=bs_train_e, shuffle=true)
-bs_train_f = floor(Int, length(dB_train) * 0.025) # 0.025
+bs_train_f = floor(Int, length(dB_train) * 0.0125) # 0.025
 train_loader_f   = DataLoader((B_train_ext / B_ref,
                                dB_train / dB_ref,
                                f_train / f_ref),
@@ -302,48 +305,58 @@ println("Training energies and forces...")
 
 
 # Training using BFGS from Optimizer.jl (serial version)
+time_fitting += Base.@elapsed begin
+    ps, re = Flux.destructure(nnbp.nn)
+    ((bs_e, es), (bs_f, dbs_f, fs)) = collect(zip(train_loader_e, train_loader_f))[1]
+    loss(ps, p) = loss(potential_energy.(bs_e, [ps], [re]), es, 
+                       force.(bs_f, dbs_f, [ps], [re]), fs)
+    dlossdps = OptimizationFunction(loss, Optimization.AutoForwardDiff()) # Optimization.AutoZygote()
+    prob = OptimizationProblem(dlossdps, ps, [])
+    callback = function (p, l)
+        println("Thread: $(Threads.threadid()) current loss is: $l")
+        return false
+    end
+    sol = solve(prob, BFGS(), callback=callback) # reltol = 1e-14, maxiters=1e11)
+    ps = sol.u
+    nnbp.nn = re(ps)
+    nnbp.nn_params = Flux.params(nnbp.nn)
+end
+println("time_fitting:",time_fitting)
+
+## Training using BFGS and data parallelism with Base.Threads
 #time_fitting += Base.@elapsed begin
 #ps, re = Flux.destructure(nnbp.nn)
-#((bs_e, es), (bs_f, dbs_f, fs)) = collect(zip(train_loader_e, train_loader_f))[1]
-#loss(ps, p) = loss(potential_energy.(bs_e, [ps], [re]), es, 
-#                   force.(bs_f, dbs_f, [ps], [re]), fs)
-#dlossdps = OptimizationFunction(loss, Optimization.AutoForwardDiff()) # Optimization.AutoZygote()
-#prob = OptimizationProblem(dlossdps, ps, [])
-#sol = solve(prob, BFGS(), reltol = 1e-14, maxiters=1e11)
-#ps = sol.u
+## Compute loss of each batch
+#nt = Threads.nthreads()
+#opt_func = Array{Function}(undef, nt);
+#Threads.@threads for ((bs_e, es), (bs_f, dbs_f, fs)) in
+#                      collect(zip(train_loader_e, train_loader_f))[1:nt]
+#    batch_loss(ps, p) = loss(potential_energy.(bs_e, [ps], [re]), es, 
+#                             force.(bs_f, dbs_f, [ps], [re]), fs)
+#    opt_func[Threads.threadid()] = batch_loss
+#end
+## Compute total loss and gradient
+#total_loss(ps, p) = mean([f(ps, p) for f in opt_func])
+#dlossdps = [OptimizationFunction(total_loss, Optimization.AutoForwardDiff()) for i in 1:nt]
+#pss = [deepcopy(ps) for i in 1:nt]
+## Optimize using averaged gradient on each batch
+#callback = function (p, l)
+#    println("Thread: $(Threads.threadid()) current loss is: $l")
+#    return false
+#end
+#Threads.@threads for ((bs_e, es), (bs_f, dbs_f, fs)) in
+#                     collect(zip(train_loader_e, train_loader_f))[1:nt]
+#    tid = Threads.threadid()
+#    prob = OptimizationProblem(dlossdps[tid], pss[tid], [])
+#    sol = solve(prob, BFGS(), callback = callback)
+#    ps = sol.u
+#    pss[tid] = ps
+#end
+## Average parameters
+#ps = mean(pss)
 #nnbp.nn = re(ps)
 #nnbp.nn_params = Flux.params(nnbp.nn)
 #end
-#println("time_fitting:",time_fitting)
-
-# Training using BFGS and data parallelism with Base.Threads
-time_fitting += Base.@elapsed begin
-ps, re = Flux.destructure(nnbp.nn)
-# Compute loss of each batch
-opt_func = [Function[] for i in 4]
-Threads.@threads for ((bs_e, es), (bs_f, dbs_f, fs)) in
-                      collect(zip(train_loader_e, train_loader_f))[1:4]
-    batch_loss(ps, p) = loss(potential_energy.(bs_e, [ps], [re]), es, 
-                             force.(bs_f, dbs_f, [ps], [re]), fs)
-    push!(opt_func[Threads.threadid()], batch_loss)
-end
-# Compute total loss and gradient
-total_loss(ps, p) = mean([f[1](ps, p) for f in opt_func])
-dlossdps = OptimizationFunction(total_loss, Optimization.AutoForwardDiff())
-pss = [deepcopy(ps) for i in 1:4]
-# Optimize using averaged gradient on each batch
-Threads.@threads for ((bs_e, es), (bs_f, dbs_f, fs)) in
-                     collect(zip(train_loader_e, train_loader_f))[1:4]
-    prob = OptimizationProblem(dlossdps, pss[Threads.threadid()], [])
-    sol = solve(prob, BFGS(), reltol = 1e-14, maxiters=1e11)
-    ps = sol.u
-    push!(pss[Threads.threadid()], ps)
-end
-# Average parameters
-ps = mean(pss)
-nnbp.nn = re(ps)
-nnbp.nn_params = Flux.params(nnbp.nn)
-end
 
 write(experiment_path*"params.dat", "$(nnbp.nn_params)")
 
