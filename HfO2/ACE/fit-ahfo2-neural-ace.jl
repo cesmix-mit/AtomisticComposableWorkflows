@@ -19,6 +19,7 @@ using BSON: @save
 using CUDA
 using BenchmarkTools
 using Plots
+using Profile, FileIO
 
 # execute: julia --threads 4 fit-ahfo2-neural-ace.jl
 
@@ -305,58 +306,64 @@ println("Training energies and forces...")
 
 
 # Training using BFGS from Optimizer.jl (serial version)
-time_fitting += Base.@elapsed begin
-    ps, re = Flux.destructure(nnbp.nn)
-    ((bs_e, es), (bs_f, dbs_f, fs)) = collect(zip(train_loader_e, train_loader_f))[1]
-    loss(ps, p) = loss(potential_energy.(bs_e, [ps], [re]), es, 
-                       force.(bs_f, dbs_f, [ps], [re]), fs)
-    dlossdps = OptimizationFunction(loss, Optimization.AutoForwardDiff()) # Optimization.AutoZygote()
-    prob = OptimizationProblem(dlossdps, ps, [])
-    callback = function (p, l)
-        println("Thread: $(Threads.threadid()) current loss is: $l")
-        return false
-    end
-    sol = solve(prob, BFGS(), callback=callback) # reltol = 1e-14, maxiters=1e11)
-    ps = sol.u
-    nnbp.nn = re(ps)
-    nnbp.nn_params = Flux.params(nnbp.nn)
-end
-println("time_fitting:",time_fitting)
+#time_fitting += Base.@elapsed begin
+#    ps, re = Flux.destructure(nnbp.nn)
+#    ((bs_e, es), (bs_f, dbs_f, fs)) = collect(zip(train_loader_e, train_loader_f))[2]
+#    loss(ps, p) = loss(potential_energy.(bs_e, [ps], [re]), es, 
+#                       force.(bs_f, dbs_f, [ps], [re]), fs)
+#    dlossdps = OptimizationFunction(loss, Optimization.AutoForwardDiff()) # Optimization.AutoZygote()
+#    prob = OptimizationProblem(dlossdps, ps, []) #prob = remake(prob,u0=sol.minimizer)
+#    callback = function (p, l)
+#        println("Thread: $(Threads.threadid()) current loss is: $l")
+#        return false
+#    end
+#    sol = solve(prob, BFGS(), callback=callback) # reltol = 1e-14, maxiters=1e11)
+#    ps = sol.u
+#    nnbp.nn = re(ps)
+#    nnbp.nn_params = Flux.params(nnbp.nn)
+#end
+#println("time_fitting:",time_fitting)
 
 ## Training using BFGS and data parallelism with Base.Threads
 #time_fitting += Base.@elapsed begin
-#ps, re = Flux.destructure(nnbp.nn)
-## Compute loss of each batch
-#nt = Threads.nthreads()
-#opt_func = Array{Function}(undef, nt);
-#Threads.@threads for ((bs_e, es), (bs_f, dbs_f, fs)) in
-#                      collect(zip(train_loader_e, train_loader_f))[1:nt]
-#    batch_loss(ps, p) = loss(potential_energy.(bs_e, [ps], [re]), es, 
-#                             force.(bs_f, dbs_f, [ps], [re]), fs)
-#    opt_func[Threads.threadid()] = batch_loss
+ps, re = Flux.destructure(nnbp.nn)
+nt = Threads.nthreads() 
+loaders = collect(zip(train_loader_e, train_loader_f))[1:nt]
+# Compute loss of each batch
+opt_func = Array{Function}(undef, nt);
+for tid in 1:nt
+    ((bs_e, es), (bs_f, dbs_f, fs)) = loaders[tid]
+    batch_loss(ps, p) = loss(potential_energy.(bs_e, [ps], [re]), es, 
+                             force.(bs_f, dbs_f, [ps], [re]), fs)
+    opt_func[tid] = batch_loss
+end
+# Compute total loss and define optimization function
+total_loss(ps, p) = mean([f(ps, p) for f in opt_func])
+dlossdps = OptimizationFunction(total_loss, Optimization.AutoForwardDiff())
+# Optimize using averaged gradient on each batch
+callback = function (p, l)
+    println("Thread $(Threads.threadid()), current loss is: $l")
+    return false
+end
+pss = [deepcopy(ps) for i in 1:nt]
+@profile Threads.@threads for tid in 1:nt
+    ((bs_e, es), (bs_f, dbs_f, fs)) = loaders[tid]
+    ps_i = deepcopy(ps)
+    prob = OptimizationProblem(dlossdps, ps_i, [])
+    sol = solve(prob, BFGS(), callback = callback, maxiters = 10)
+    pss[tid] = sol.u
+end
+# Average parameters
+ps = mean(pss)
+nnbp.nn = re(ps)
+nnbp.nn_params = Flux.params(nnbp.nn)
 #end
-## Compute total loss and gradient
-#total_loss(ps, p) = mean([f(ps, p) for f in opt_func])
-#dlossdps = [OptimizationFunction(total_loss, Optimization.AutoForwardDiff()) for i in 1:nt]
-#pss = [deepcopy(ps) for i in 1:nt]
-## Optimize using averaged gradient on each batch
-#callback = function (p, l)
-#    println("Thread: $(Threads.threadid()) current loss is: $l")
-#    return false
-#end
-#Threads.@threads for ((bs_e, es), (bs_f, dbs_f, fs)) in
-#                     collect(zip(train_loader_e, train_loader_f))[1:nt]
-#    tid = Threads.threadid()
-#    prob = OptimizationProblem(dlossdps[tid], pss[tid], [])
-#    sol = solve(prob, BFGS(), callback = callback)
-#    ps = sol.u
-#    pss[tid] = ps
-#end
-## Average parameters
-#ps = mean(pss)
-#nnbp.nn = re(ps)
-#nnbp.nn_params = Flux.params(nnbp.nn)
-#end
+
+save("fit-ahfo2-neural-ace.jlprof",  Profile.retrieve()...)
+
+#using ProfileView, FileIO
+#data = load("fit-ahfo2-neural-ace.jlprof")
+#ProfileView.view(data[1], lidict=data[2])
 
 write(experiment_path*"params.dat", "$(nnbp.nn_params)")
 
