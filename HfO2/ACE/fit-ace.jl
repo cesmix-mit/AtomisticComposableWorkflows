@@ -1,3 +1,6 @@
+# This code will be used to enrich InteratomicPotentials.jl, 
+# InteratomicBasisPotentials.jl, and PotentialLearning.jl.
+
 using AtomsBase
 using InteratomicPotentials 
 using InteratomicBasisPotentials
@@ -17,10 +20,10 @@ if size(ARGS, 1) == 0
     #         "1800", "4", "4", "1", "5", "1", "1", "1", "1"]
     #input = ["fit-ahfo2-ace/", "data/", "a-Hfo2-300K-NVT.extxyz",
     #         "100", "2", "3", "1", "5", "1", "1", "1", "1"]
-    input = ["fit-ahfo2-ace/", "data/", "a-Hfo2-300K-NVT.extxyz",
-             "100", "3", "3", "1", "5", "1", "1", "1", "1"]
     #input = ["fit-ahfo2-ace/", "data/", "a-Hfo2-300K-NVT.extxyz",
     #         "100", "5", "5", "1", "5", "1", "1", "1", "1"]
+    input = ["fit-TiO2-ace/", "data/", "TiO2trainingset.xyz",
+             "100", "3", "3", "1", "5", "1", "1", "1", "1"]
 else
     input = ARGS
 end

@@ -1,7 +1,11 @@
+# This code will be used to enrich InteratomicPotentials.jl, 
+# InteratomicBasisPotentials.jl, and PotentialLearning.jl.
+
 using AtomsBase
 using InteratomicPotentials 
 using InteratomicBasisPotentials
 using LinearAlgebra 
+#using MKL
 using Random
 using StaticArrays
 using Statistics 
@@ -19,19 +23,16 @@ using BSON: @save
 using CUDA
 using BenchmarkTools
 using Plots
-using Profile, FileIO
-
-# execute: julia --threads 4 fit-ahfo2-neural-ace.jl
-
+#using Profile, FileIO
 
 # Load input parameters ########################################################
 if size(ARGS, 1) == 0
     #input = ["fit-ahfo2-neural-ace/", "data/", "a-Hfo2-300K-NVT.extxyz",
-    #         "100", "3", "3", "1", "5", "1", "1", "1", "1"]
-    #input = ["fit-ahfo2-neural-ace/", "data/", "a-Hfo2-300K-NVT.extxyz",
     #         "100", "2", "3", "1", "5", "1", "1", "1", "1"]
-    input = ["fit-ahfo2-neural-ace-bis/", "data/", "a-Hfo2-300K-NVT.extxyz",
-             "100", "3", "3", "1", "5", "1", "1", "1", "0.01"]
+    #input = ["fit-ahfo2-neural-ace/", "data/", "a-Hfo2-300K-NVT.extxyz",
+    #         "100", "3", "3", "1", "5", "1", "1", "1", "1"
+    input = ["fit-TiO2-neural-ace/", "data/", "TiO2.xyz",
+             "100", "3", "3", "1", "5", "1", "1", "1", "1"]
 else
     input = ARGS
 end
@@ -124,10 +125,10 @@ f_ref = 1 #maximum(abs.(f_train))
 B_ref = 1 #maximum([maximum(abs.(b)) for b in B_train])
 dB_ref = 1 #1/B_ref
 
-bs_train_e = floor(Int, length(B_train) * 0.0125 ) # 0.5, 0.025
+bs_train_e = floor(Int, length(B_train) * 0.125 ) # 0.5, 0.025
 train_loader_e   = DataLoader((B_train / B_ref, e_train / e_ref),
                                batchsize=bs_train_e, shuffle=true)
-bs_train_f = floor(Int, length(dB_train) * 0.0125) # 0.025
+bs_train_f = floor(Int, length(dB_train) * 0.125) # 0.025
 train_loader_f   = DataLoader((B_train_ext / B_ref,
                                dB_train / dB_ref,
                                f_train / f_ref),
@@ -272,43 +273,79 @@ end
 println("Training energies and forces...")
 
 # Training using ADAM from Flux.jl
-#epochs = 5_000
-#opt = ADAM(0.001) # opt = ADAM(0.002, (0.9, 0.999)) 
-#ps, re = Flux.destructure(nnbp.nn)
-#for epoch in 1:epochs
-#    global time_fitting += Base.@elapsed for ((bs_e, es), (bs_f, dbs_f, fs)) in
-#                                              zip(train_loader_e, train_loader_f)
-#        g = gradient(Flux.params(ps)) do
-#            #loss(potential_energy.(bs_e, [ps], [re]), es,
-#            #     force.(bs_f, dbs_f, [ps], [re]), fs)
-#            Flux.Losses.mae(potential_energy.(bs_e, [ps], [re]), es)
-#        end
-#        Flux.Optimise.update!(opt, Flux.params(ps), g)
-#    end
-#    
-#    # Report losses and time
-#    training_loss = mean([Flux.Losses.mae(potential_energy.(bs_e, [ps], [re]), es)
-#                          for (bs_e, es) in train_loader_e])
-#    testing_loss = mean([Flux.Losses.mae(potential_energy.(bs_e, [ps], [re]), es)
-#                         for (bs_e, es) in test_loader_e])
-#    
-##    training_loss = mean([Flux.Losses.mae(force.(bs_f, dbs_f, [ps], [re]), fs)
-##                          for (bs_f, dbs_f, fs) in train_loader_f])
-##    testing_loss = mean([Flux.Losses.mae(force.(bs_f, dbs_f, [ps], [re]), fs)
-##                         for (bs_f, dbs_f, fs) in test_loader_f])
-#    println("Epoch: $(epoch), \
-#             training loss: $(training_loss), \
-#             testing loss: $(testing_loss), \
-#             time: $(time)")
-#end
-#nnbp.nn = re(ps)
-#nnbp.nn_params = Flux.params(nnbp.nn)
+function train_adam()
+    epochs = 100
+    opt = ADAM(0.001) # opt = ADAM(0.002, (0.9, 0.999)) 
+    ps, re = Flux.destructure(nnbp.nn)
+    for epoch in 1:epochs
+        global time_fitting += Base.@elapsed for ((bs_e, es), (bs_f, dbs_f, fs)) in
+                                                  zip(train_loader_e, train_loader_f)
+            g = gradient(Flux.params(ps)) do
+                loss(potential_energy.(bs_e, [ps], [re]), es,
+                     force.(bs_f, dbs_f, [ps], [re]), fs)
+            end
+            Flux.Optimise.update!(opt, Flux.params(ps), g)
+        end
+        
+        # Report losses
+        training_loss = mean([loss(potential_energy.(bs_e, [ps], [re]), es, 
+                                   force.(bs_f, dbs_f, [ps], [re]), fs)
+                              for ((bs_e, es), (bs_f, dbs_f, fs)) in
+                                  zip(train_loader_e, train_loader_f)])
+        testing_loss = mean([loss(potential_energy.(bs_e, [ps], [re]), es, 
+                                  force.(bs_f, dbs_f, [ps], [re]), fs)
+                              for ((bs_e, es), (bs_f, dbs_f, fs)) in
+                                  zip(test_loader_e, test_loader_f)])
+        println("Epoch: $(epoch), \
+                 training loss: $(training_loss), \
+                 testing loss: $(testing_loss)")
+    end
+    nnbp.nn = re(ps)
+    nnbp.nn_params = Flux.params(nnbp.nn)
+end
 
+# Training using BFGS from Optimization.jl
+function train_bfgs()
+    epochs = 10
+    ps, re = Flux.destructure(nnbp.nn)
+    for epoch in 1:epochs
+        global time_fitting += Base.@elapsed for ((bs_e, es), (bs_f, dbs_f, fs)) in
+                                                  zip(train_loader_e, train_loader_f)
+                loss(ps, p) = loss(potential_energy.(bs_e, [ps], [re]), es, 
+                                   force.(bs_f, dbs_f, [ps], [re]), fs)
+                dlossdps = OptimizationFunction(loss, Optimization.AutoForwardDiff()) # Optimization.AutoZygote()
+                prob = OptimizationProblem(dlossdps, ps, []) #prob = remake(prob,u0=sol.minimizer)
+                callback = function (p, l)
+                    println("Current training loss is: $l")
+                    return false
+                end
+                sol = solve(prob, BFGS(), callback=callback, maxiters=50) # reltol = 1e-14, maxiters=1e11)
+                global ps = sol.u
+        end
+        
+        # Report losses
+        training_loss = mean([loss(potential_energy.(bs_e, [ps], [re]), es, 
+                                   force.(bs_f, dbs_f, [ps], [re]), fs)
+                              for ((bs_e, es), (bs_f, dbs_f, fs)) in
+                                  zip(train_loader_e, train_loader_f)])
+        testing_loss = mean([loss(potential_energy.(bs_e, [ps], [re]), es, 
+                                  force.(bs_f, dbs_f, [ps], [re]), fs)
+                              for ((bs_e, es), (bs_f, dbs_f, fs)) in
+                                  zip(test_loader_e, test_loader_f)])
+        println("Epoch: $(epoch), \
+                 training loss: $(training_loss), \
+                 testing loss: $(testing_loss)")
+    end
+    nnbp.nn = re(ps)
+    nnbp.nn_params = Flux.params(nnbp.nn)
+end
 
-# Training using BFGS from Optimizer.jl (serial version)
+train_bfgs()
+
+# Training using BFGS from Optimizer.jl (1 batch)
 #time_fitting += Base.@elapsed begin
 #    ps, re = Flux.destructure(nnbp.nn)
-#    ((bs_e, es), (bs_f, dbs_f, fs)) = collect(zip(train_loader_e, train_loader_f))[2]
+#    ((bs_e, es), (bs_f, dbs_f, fs)) = collect(zip(train_loader_e, train_loader_f))[1]
 #    loss(ps, p) = loss(potential_energy.(bs_e, [ps], [re]), es, 
 #                       force.(bs_f, dbs_f, [ps], [re]), fs)
 #    dlossdps = OptimizationFunction(loss, Optimization.AutoForwardDiff()) # Optimization.AutoZygote()
@@ -317,53 +354,57 @@ println("Training energies and forces...")
 #        println("Thread: $(Threads.threadid()) current loss is: $l")
 #        return false
 #    end
-#    sol = solve(prob, BFGS(), callback=callback) # reltol = 1e-14, maxiters=1e11)
+#    sol = solve(prob, BFGS(), callback=callback, maxiters=1000) # reltol = 1e-14
 #    ps = sol.u
 #    nnbp.nn = re(ps)
 #    nnbp.nn_params = Flux.params(nnbp.nn)
 #end
-#println("time_fitting:",time_fitting)
 
+println("time_fitting:", time_fitting)
+
+
+#-------------------------------------------------------------------------------
 ## Training using BFGS and data parallelism with Base.Threads
-#time_fitting += Base.@elapsed begin
-ps, re = Flux.destructure(nnbp.nn)
-nt = Threads.nthreads() 
-loaders = collect(zip(train_loader_e, train_loader_f))[1:nt]
-# Compute loss of each batch
-opt_func = Array{Function}(undef, nt);
-for tid in 1:nt
-    ((bs_e, es), (bs_f, dbs_f, fs)) = loaders[tid]
-    batch_loss(ps, p) = loss(potential_energy.(bs_e, [ps], [re]), es, 
-                             force.(bs_f, dbs_f, [ps], [re]), fs)
-    opt_func[tid] = batch_loss
-end
-# Compute total loss and define optimization function
-total_loss(ps, p) = mean([f(ps, p) for f in opt_func])
-dlossdps = OptimizationFunction(total_loss, Optimization.AutoForwardDiff())
-# Optimize using averaged gradient on each batch
-callback = function (p, l)
-    println("Thread $(Threads.threadid()), current loss is: $l")
-    return false
-end
-pss = [deepcopy(ps) for i in 1:nt]
-@profile Threads.@threads for tid in 1:nt
-    ((bs_e, es), (bs_f, dbs_f, fs)) = loaders[tid]
-    ps_i = deepcopy(ps)
-    prob = OptimizationProblem(dlossdps, ps_i, [])
-    sol = solve(prob, BFGS(), callback = callback, maxiters = 10)
-    pss[tid] = sol.u
-end
-# Average parameters
-ps = mean(pss)
-nnbp.nn = re(ps)
-nnbp.nn_params = Flux.params(nnbp.nn)
+# execute: julia --threads 4 fit-ahfo2-neural-ace.jl
+# BLAS.set_num_threads(1)
+##time_fitting += Base.@elapsed begin
+#ps, re = Flux.destructure(nnbp.nn)
+#nt = Threads.nthreads() 
+#loaders = collect(zip(train_loader_e, train_loader_f))[1:nt]
+## Compute loss of each batch
+#opt_func = Array{Function}(undef, nt);
+#for tid in 1:nt
+#    ((bs_e, es), (bs_f, dbs_f, fs)) = loaders[tid]
+#    batch_loss(ps, p) = loss(potential_energy.(bs_e, [ps], [re]), es, 
+#                             force.(bs_f, dbs_f, [ps], [re]), fs)
+#    opt_func[tid] = batch_loss
 #end
-
-save("fit-ahfo2-neural-ace.jlprof",  Profile.retrieve()...)
-
+## Compute total loss and define optimization function
+#total_loss(ps, p) = mean([f(ps, p) for f in opt_func])
+#dlossdps = OptimizationFunction(total_loss, Optimization.AutoForwardDiff()) # Optimization.AutoZygote())
+## Optimize using averaged gradient on each batch
+#callback = function (p, l)
+#    println("Thread $(Threads.threadid()), current loss is: $l")
+#    return false
+#end
+#pss = [deepcopy(ps) for i in 1:nt]
+##@profile Threads.@threads for tid in 1:nt
+#    ((bs_e, es), (bs_f, dbs_f, fs)) = loaders[tid]
+#    ps_i = deepcopy(ps)
+#    prob = OptimizationProblem(dlossdps, ps_i, []) # prob = remake(prob,u0=sol.minimizer)
+#    sol = solve(prob, BFGS(), callback = callback, maxiters=10_000_000)
+#    pss[tid] = sol.u
+#end
+## Average parameters
+#ps = mean(pss)
+#nnbp.nn = re(ps)
+#nnbp.nn_params = Flux.params(nnbp.nn)
+#end
+#save("fit-ahfo2-neural-ace.jlprof",  Profile.retrieve()...)
 #using ProfileView, FileIO
 #data = load("fit-ahfo2-neural-ace.jlprof")
 #ProfileView.view(data[1], lidict=data[2])
+#-------------------------------------------------------------------------------
 
 write(experiment_path*"params.dat", "$(nnbp.nn_params)")
 
@@ -379,16 +420,15 @@ f_test_pred_v = collect(eachcol(reshape(f_test_pred, 3, :)))
 # Calculate metrics ############################################################
 function calc_metrics(x_pred, x)
     x_mae = sum(abs.(x_pred .- x)) / length(x)
-    x_mre = mean(abs.((x_pred .- x) ./ x))
     x_rmse = sqrt(sum((x_pred .- x).^2) / length(x))
     x_rsq = 1 - sum((x_pred .- x).^2) / sum((x .- mean(x)).^2)
-    return x_mae, x_mre, x_rmse, x_rsq
+    return x_mae, x_rmse, x_rsq
 end
 
-e_train_mae, e_train_mre, e_train_rmse, e_train_rsq = calc_metrics(e_train_pred, e_train)
-f_train_mae, f_train_mre, f_train_rmse, f_train_rsq = calc_metrics(f_train_pred, f_train)
-e_test_mae, e_test_mre, e_test_rmse, e_test_rsq = calc_metrics(e_test_pred, e_test)
-f_test_mae, f_test_mre, f_test_rmse, f_test_rsq = calc_metrics(f_test_pred, f_test)
+e_train_mae, e_train_rmse, e_train_rsq = calc_metrics(e_train_pred, e_train)
+f_train_mae, f_train_rmse, f_train_rsq = calc_metrics(f_train_pred, f_train)
+e_test_mae, e_test_rmse, e_test_rsq = calc_metrics(e_test_pred, e_test)
+f_test_mae, f_test_rmse, f_test_rsq = calc_metrics(f_test_pred, f_test)
 
 f_test_cos = dot.(f_test_v, f_test_pred_v) ./ (norm.(f_test_v) .* norm.(f_test_pred_v))
 f_test_mean_cos = mean(f_test_cos)
@@ -399,18 +439,18 @@ dataset_filename = input["dataset_filename"]
 write(experiment_path*"results.csv", "dataset,\
                       n_systems,n_params,n_body,max_deg,r0,\
                       rcutoff,wL,csp,w_e,w_f,\
-                      e_train_mae,e_train_mre,e_train_rmse,e_train_rsq,\
-                      f_train_mae,f_train_mre,f_train_rmse,f_train_rsq,\
-                      e_test_mae,e_test_mre,e_test_rmse,e_test_rsq,\
-                      f_test_mae,f_test_mre,f_test_rmse,f_test_rsq,\
+                      e_train_mae,e_train_rmse,e_train_rsq,\
+                      f_train_mae,f_train_rmse,f_train_rsq,\
+                      e_test_mae,e_test_rmse,e_test_rsq,\
+                      f_test_mae,f_test_rmse,f_test_rsq,\
                       f_test_mean_cos,B_time,dB_time,time_fitting
                       $(dataset_filename), \
                       $(n_systems),$(n_params),$(n_body),$(max_deg),$(r0),\
                       $(rcutoff),$(wL),$(csp),$(w_e),$(w_e),\
-                      $(e_train_mae),$(e_train_mre),$(e_train_rmse),$(e_train_rsq),\
-                      $(f_train_mae),$(f_train_mre),$(f_train_rmse),$(f_train_rsq),\
-                      $(e_test_mae),$(e_test_mre),$(e_test_rmse),$(e_test_rsq),\
-                      $(f_test_mae),$(f_test_mre),$(f_test_rmse),$(f_test_rsq),\
+                      $(e_train_mae),$(e_train_rmse),$(e_train_rsq),\
+                      $(f_train_mae),$(f_train_rmse),$(f_train_rsq),\
+                      $(e_test_mae),$(e_test_rmse),$(e_test_rsq),\
+                      $(f_test_mae),$(f_test_rmse),$(f_test_rsq),\
                       $(f_test_mean_cos),$(B_time),$(dB_time),$(time_fitting)")
 
 write(experiment_path*"results-short.csv", "dataset,\
