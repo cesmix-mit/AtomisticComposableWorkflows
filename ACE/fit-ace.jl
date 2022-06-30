@@ -1,3 +1,6 @@
+# This code will be used to enrich InteratomicPotentials.jl, 
+# InteratomicBasisPotentials.jl, and PotentialLearning.jl.
+
 using AtomsBase
 using InteratomicPotentials 
 using InteratomicBasisPotentials
@@ -8,21 +11,19 @@ using Statistics
 using StatsBase
 using UnitfulAtomic
 using Unitful 
-using Flux
-using Flux.Data: DataLoader
-using BSON: @save
-using CUDA
 using BenchmarkTools
 using Plots
 
 # Load input parameters ########################################################
 if size(ARGS, 1) == 0
-    #input = ["fit-hfo2-ace-nn/", "data/", "HfO2_cpmd_train_0_94_11.xyz",
-    #         "1800", "3", "3", "1", "5", "1", "1", "1", "1"]
-    #input = ["fit-ahfo2-ace-nn/", "data/", "a-Hfo2-300K-NVT.extxyz",
+    #input = ["fit-hfo2-ace/", "data/", "HfO2_cpmd_train_0_94_11.xyz",
+    #         "1800", "4", "4", "1", "5", "1", "1", "1", "1"]
+    #input = ["fit-ahfo2-ace/", "data/", "a-Hfo2-300K-NVT.extxyz",
     #         "100", "2", "3", "1", "5", "1", "1", "1", "1"]
-    input = ["fit-ahfo2-ace-nn/", "data/", "HfO2_cpmd_train_0_94_11.xyz",
-             "100", "2", "3", "1", "5", "1", "1", "1", "1"]
+    #input = ["fit-ahfo2-ace/", "data/", "a-Hfo2-300K-NVT.extxyz",
+    #         "100", "5", "5", "1", "5", "1", "1", "1", "1"]
+    input = ["fit-TiO2-ace/", "data/", "TiO2trainingset.xyz",
+             "100", "3", "3", "1", "5", "1", "1", "1", "1"]
 else
     input = ARGS
 end
@@ -78,7 +79,7 @@ write(experiment_path*"e_test.dat", "$(e_test)")
 write(experiment_path*"f_test.dat", "$(f_test)")
 
 
-# Define RPI parameters ########################################################
+# Define ACE parameters ########################################################
 n_body = input["n_body"]
 max_deg = input["max_deg"]
 r0 = input["r0"]
@@ -86,15 +87,15 @@ rcutoff = input["rcutoff"]
 wL = input["wL"]
 csp = input["csp"]
 atomic_symbols = unique(atomic_symbol(systems[1]))
-rpi_params = RPIParams(atomic_symbols, n_body, max_deg, wL, csp, r0, rcutoff)
-write(experiment_path*"rpi_params.dat", "$(rpi_params)")
+ibp_params = ACEParams(atomic_symbols, n_body, max_deg, wL, csp, r0, rcutoff)
+write(experiment_path*"ibp_params.dat", "$(ibp_params)")
 
 
 # Calculate descriptors ########################################################
-calc_B(sys) = evaluate_basis.(sys, [rpi_params])
-calc_dB(sys) = [ dBs_comp for dBs_sys in evaluate_basis_d.(sys, [rpi_params])
-                          for dBs_atom in dBs_sys
-                          for dBs_comp in eachrow(dBs_atom)]
+calc_B(sys) = vcat((evaluate_basis.(sys, [ibp_params])'...))
+calc_dB(sys) =
+    vcat([vcat(d...) for d in evaluate_basis_d.(sys, [ibp_params])]...)
+    #vcat([vcat(d...) for d in ThreadsX.collect(evaluate_basis_d(s, ibp_params) for s in sys)]...)
 B_time = @time @elapsed B_train = calc_B(train_systems)
 dB_time = @time @elapsed dB_train = calc_dB(train_systems)
 B_test = calc_B(test_systems)
@@ -105,76 +106,50 @@ write(experiment_path*"B_test.dat", "$(B_test)")
 write(experiment_path*"dB_test.dat", "$(dB_test)")
 
 
-# Define neural network model ##################################################
-
+# Calculate A and b ############################################################
 time_fitting = Base.@elapsed begin
+A = [B_train; dB_train]
+b = [e_train; f_train]
 
-# Normalize and split data into batches
-e_ref = 1 #maximum(abs.(e_train))
-f_ref = 1 #maximum(abs.(f_train))
-B_ref = 1 #maximum([maximum(abs.(b)) for b in B_train])
-dB_ref = 1 #maximum([maximum(abs.(db)) for db in dB_train])
-e_train_loader = DataLoader((B_train / B_ref, e_train / e_ref),
-                             batchsize=32, shuffle=true)
-e_test_loader  = DataLoader((B_test / B_ref, e_test / e_ref),
-                             batchsize=32)
-train_loader   = DataLoader(([B_train / B_ref; dB_train / dB_ref],
-                             [e_train / e_ref; f_train / f_ref]),
-                             batchsize=32, shuffle=true)
-test_loader    = DataLoader(([B_test / B_ref; dB_test / dB_ref],
-                             [e_test / e_ref; f_test / f_ref]),
-                             batchsize=32)
+# Filter outliers
+#fmean = mean(f_train); fstd = std(f_train)
+#non_outliers = fmean - 2fstd .< f_train .< fmean + 2fstd 
+#f_train = f_train[non_outliers]
+#v = BitVector([ ones(length(e_train)); non_outliers])
+#A = A[v , :]
 
-# Define neural network model
-n_desc = size(first(train_loader)[1][1], 1) # size(B_train[1], 1) + 1
-model = Chain(Dense(n_desc,32,Flux.relu), Dense(32,32,Flux.relu), Dense(32,1))
-nn(d) = sum(model(d))
-ps = Flux.params(model)
-n_params = sum(length, Flux.params(model))
 
-# Define loss functions
-e_weight = input["e_weight"]; f_weight = input["f_weight"] # not needed for now
-loss(b_pred, b) = sum(abs.(b_pred .- b)) / length(b)
-global_loss(loader) = sum([loss(nn.(d), b) for (d, b) in loader]) / length(loader)
-
-# Define optimizer
-opt = ADAM(0.001) # ADAM(0.002, (0.9, 0.999)) 
+# Calculate coefficients β #####################################################
+e_weight = input["e_weight"]; f_weight = input["f_weight"]
+Q = Diagonal([e_weight * ones(length(e_train));
+              f_weight * ones(length(f_train))])
+β = (A'*Q*A) \ (A'*Q*b)
 
 end
 
-# Train ########################################################################
-function train(epochs, loader)
-    for epoch in 1:epochs
-        # Training of one epoch
-        time = Base.@elapsed for (d, b) in loader
-            gs = gradient(() -> loss(nn.(d), b), ps)
-            Flux.Optimise.update!(opt, ps, gs)
-        end
-        global time_fitting += time
-        # Report losses and time
-        println("Epoch: $(epoch), \
-                 training loss: $(global_loss(train_loader)), \
-                 testing loss: $(global_loss(test_loader)), \
-                 time: $(time)")
-    end
-end
+## Check weights
+#using IterTools
+#for (e_weight, f_weight) in product(1:10:100, 1:10:100)
+#    Q = Diagonal([e_weight * ones(length(e_train));
+#                  f_weight * ones(length(f_train))])
+#    try
+#        β = (A'*Q*A) \ (A'*Q*b)
+#        a = compute_errors(dB_test * β, f_test)
+#        println(e_weight,", ", f_weight, ", ", a[1])
+#    catch
+#        println("Exception with :", e_weight,", ", f_weight)
+#    end
+#end
 
-# Train energies and forces
-println("Training energies and forces...")
-epochs = 6000; train(epochs, train_loader)
-
-# Train energies
-#println("Training energies...")
-#epochs = 200; train(epochs, e_train_loader)
-
-write(experiment_path*"params.dat", "$(ps)")
+n_params = size(β,1)
+write(experiment_path*"beta.dat", "$β")
 
 
 # Calculate predictions ########################################################
-e_train_pred = nn.(B_train / B_ref) * e_ref
-f_train_pred = nn.(dB_train / dB_ref) * f_ref
-e_test_pred  = nn.(B_test / B_ref) * e_ref
-f_test_pred = nn.(dB_test / dB_ref) * f_ref
+e_train_pred = B_train * β
+f_train_pred = dB_train * β
+e_test_pred = B_test * β
+f_test_pred = dB_test * β
 f_test_pred_v = collect(eachcol(reshape(f_test_pred, 3, :)))
 
 
@@ -187,10 +162,10 @@ function calc_metrics(x_pred, x)
     return x_mae, x_mre, x_rmse, x_rsq
 end
 
-e_train_mae, e_train_mre, e_train_rmse, e_train_rsq = calc_metrics(e_train_pred, e_train)
-f_train_mae, f_train_mre, f_train_rmse, f_train_rsq = calc_metrics(f_train_pred, f_train)
-e_test_mae, e_test_mre, e_test_rmse, e_test_rsq = calc_metrics(e_test_pred, e_test)
-f_test_mae, f_test_mre, f_test_rmse, f_test_rsq = calc_metrics(f_test_pred, f_test)
+e_train_mae, e_train_rmse, e_train_rsq = calc_metrics(e_train_pred, e_train)
+f_train_mae, f_train_rmse, f_train_rsq = calc_metrics(f_train_pred, f_train)
+e_test_mae, e_test_rmse, e_test_rsq = calc_metrics(e_test_pred, e_test)
+f_test_mae, f_test_rmse, f_test_rsq = calc_metrics(f_test_pred, f_test)
 
 f_test_cos = dot.(f_test_v, f_test_pred_v) ./ (norm.(f_test_v) .* norm.(f_test_pred_v))
 f_test_mean_cos = mean(f_test_cos)
@@ -201,18 +176,18 @@ dataset_filename = input["dataset_filename"]
 write(experiment_path*"results.csv", "dataset,\
                       n_systems,n_params,n_body,max_deg,r0,\
                       rcutoff,wL,csp,e_weight,f_weight,\
-                      e_train_mae,e_train_mre,e_train_rmse,e_train_rsq,\
-                      f_train_mae,f_train_mre,f_train_rmse,f_train_rsq,\
-                      e_test_mae,e_test_mre,e_test_rmse,e_test_rsq,\
-                      f_test_mae,f_test_mre,f_test_rmse,f_test_rsq,\
+                      e_train_mae,e_train_rmse,e_train_rsq,\
+                      f_train_mae,f_train_rmse,f_train_rsq,\
+                      e_test_mae,e_test_rmse,e_test_rsq,\
+                      f_test_mae,f_test_rmse,f_test_rsq,\
                       f_test_mean_cos,B_time,dB_time,time_fitting
                       $(dataset_filename), \
                       $(n_systems),$(n_params),$(n_body),$(max_deg),$(r0),\
                       $(rcutoff),$(wL),$(csp),$(e_weight),$(f_weight),\
-                      $(e_train_mae),$(e_train_mre),$(e_train_rmse),$(e_train_rsq),\
-                      $(f_train_mae),$(f_train_mre),$(f_train_rmse),$(f_train_rsq),\
-                      $(e_test_mae),$(e_test_mre),$(e_test_rmse),$(e_test_rsq),\
-                      $(f_test_mae),$(f_test_mre),$(f_test_rmse),$(f_test_rsq),\
+                      $(e_train_mae),$(e_train_rmse),$(e_train_rsq),\
+                      $(f_train_mae),$(f_train_rmse),$(f_train_rsq),\
+                      $(e_test_mae),$(e_test_rmse),$(e_test_rsq),\
+                      $(f_test_mae),$(f_test_rmse),$(f_test_rsq),\
                       $(f_test_mean_cos),$(B_time),$(dB_time),$(time_fitting)")
 
 write(experiment_path*"results-short.csv", "dataset,\
@@ -226,15 +201,20 @@ write(experiment_path*"results-short.csv", "dataset,\
                       $(f_test_mae),$(f_test_rmse),\
                       $(B_time),$(dB_time),$(time_fitting)")
 
-e = plot( e_test, e_test_pred, seriestype = :scatter, markerstrokewidth=0,
-          label="", xlabel = "E DFT | eV/atom", ylabel = "E predicted | eV/atom")
-savefig(e, experiment_path*"e_test.png")
+r0 = minimum(e_test); r1 = maximum(e_test); rs = (r1-r0)/10
+plot( e_test, e_test_pred, seriestype = :scatter, markerstrokewidth=0,
+      label="", xlabel = "E DFT | eV/atom", ylabel = "E predicted | eV/atom")
+plot!( r0:rs:r1, r0:rs:r1, label="")
+savefig(experiment_path*"e_test.png")
 
-f = plot( norm.(f_test_v), norm.(f_test_pred_v), seriestype = :scatter, markerstrokewidth=0,
-          label="", xlabel = "|F| DFT | eV/Å", ylabel = "|F| predicted | eV/Å")
-savefig(f, experiment_path*"f_test.png")
+r0 = 0; r1 = ceil(maximum(norm.(f_test_v)))
+plot( norm.(f_test_v), norm.(f_test_pred_v), seriestype = :scatter, markerstrokewidth=0,
+      label="", xlabel = "|F| DFT | eV/Å", ylabel = "|F| predicted | eV/Å", 
+      xlims = (r0, r1), ylims = (r0, r1))
+plot!( r0:r1, r0:r1, label="")
+savefig(experiment_path*"f_test.png")
 
-c = plot( f_test_cos, seriestype = :scatter, markerstrokewidth=0,
-          label="", xlabel = "F DFT vs F predicted", ylabel = "cos(α)")
-savefig(c, experiment_path*"f_test_cos.png")
+plot( f_test_cos, seriestype = :scatter, markerstrokewidth=0,
+      label="", xlabel = "F DFT vs F predicted", ylabel = "cos(α)")
+savefig(experiment_path*"f_test_cos.png")
 

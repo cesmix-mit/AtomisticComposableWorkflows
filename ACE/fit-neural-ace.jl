@@ -26,13 +26,14 @@ using Plots
 #using Profile, FileIO
 
 # Load input parameters ########################################################
+# This section will feed user main script and/or PotentialLearning.jl
 if size(ARGS, 1) == 0
     #input = ["fit-ahfo2-neural-ace/", "data/", "a-Hfo2-300K-NVT.extxyz",
     #         "100", "2", "3", "1", "5", "1", "1", "1", "1"]
-    #input = ["fit-ahfo2-neural-ace/", "data/", "a-Hfo2-300K-NVT.extxyz",
-    #         "100", "3", "3", "1", "5", "1", "1", "1", "1"
-    input = ["fit-TiO2-neural-ace/", "data/", "TiO2.xyz",
-             "100", "3", "3", "1", "5", "1", "1", "1", "1"]
+    input = ["fit-ahfo2-neural-ace/", "data/", "a-Hfo2-300K-NVT.extxyz",
+             "100", "3", "3", "1", "5", "1", "1", "3", "0.1"]
+    #input = ["fit-TiO2-neural-ace/", "data/", "TiO2trainingset.xyz",
+    #         "100", "3", "3", "1", "5", "1", "1", "1", "1"]
 else
     input = ARGS
 end
@@ -51,12 +52,14 @@ input = Dict( "experiment_path"     => input[1],
 
 
 # Create experiment folder #####################################################
+# This section will feed user main script and/or PotentialLearning.jl
 experiment_path = input["experiment_path"]
 run(`mkdir -p $experiment_path`)
 write(experiment_path*"input.dat", "$input")
 
 
 # Load dataset #################################################################
+# This section will feed PotentialLearning.jl
 include("load-data.jl")
 filename = input["dataset_path"]*input["dataset_filename"]
 systems, energies, forces, stresses = load_data(filename,
@@ -89,6 +92,7 @@ write(experiment_path*"f_test.dat", "$(f_test)")
 
 
 # Define IBP parameters ########################################################
+# This section will feed user main script
 n_body = input["n_body"]
 max_deg = input["max_deg"]
 r0 = input["r0"]
@@ -101,6 +105,7 @@ write(experiment_path*"ibp_params.dat", "$(ibp_params)")
 
 
 # Calculate descriptors ########################################################
+# This section will feed PotentialLearning.jl
 calc_B(sys) = evaluate_basis.(sys, [ibp_params])
 calc_dB(sys) = [ dBs_comp for dBs_sys in evaluate_basis_d.(sys, [ibp_params])
                           for dBs_atom in dBs_sys
@@ -119,6 +124,8 @@ write(experiment_path*"dB_test.dat", "$(dB_test)")
 time_fitting = Base.@elapsed begin
 
 # Define training and testing data #############################################
+# This section will feed PotentialLearning.jl
+
 # Normalize and split data into batches
 e_ref = 1 #maximum(abs.(e_train))
 f_ref = 1 #maximum(abs.(f_train))
@@ -147,6 +154,7 @@ test_loader_f   = DataLoader((B_test_ext / B_ref,
 println("batchsize_e:", bs_test_e, ", batchsize_f:", bs_test_f)
 
 # Define neural network model ##################################################
+# This section will feed InteratomicPotentials.jl/InteratomicBasisPotentials.jl
 
 # Defining NNBP composed type and associated functions
 mutable struct NNBasisPotential <: AbstractPotential
@@ -256,6 +264,13 @@ n_params = sum(length, Flux.params(nn))
 # Define neural network basis potential
 nnbp = NNBasisPotential(nn, nn_params, ibp_params)
 
+end
+
+# Train ########################################################################
+# This section will feed PotentialLearning.jl
+
+println("Training energies and forces...")
+
 # Define loss functions
 w_e = input["e_weight"]; w_f = input["f_weight"]
 loss(es_pred, es, fs_pred, fs) =  w_e * Flux.Losses.mse(es_pred, es) +
@@ -264,13 +279,9 @@ global_loss(loader_e, loader_f, ps, re) =
     mean([loss(potential_energy.(bs_e, [ps], [re]), es, force.(bs_f, dbs_f, [ps], [re]), fs)
           for ((bs_e, es), (bs_f, dbs_f, fs)) in zip(loader_e, loader_f)])
 
-end
-
-# Train ########################################################################
-# I am using one of the Optimization.jl solvers, because I have not been able to
-# tackle this problem with the Flux solvers.
-
-println("Training energies and forces...")
+training_losses = []
+testing_losses = []
+batch_train_losses = []
 
 # Training using ADAM from Flux.jl
 function train_adam()
@@ -296,31 +307,40 @@ function train_adam()
                                   force.(bs_f, dbs_f, [ps], [re]), fs)
                               for ((bs_e, es), (bs_f, dbs_f, fs)) in
                                   zip(test_loader_e, test_loader_f)])
-        println("Epoch: $(epoch), \
+        push!(training_losses, training_loss)
+        push!(testing_losses, testing_loss)
+        println("Epoch $(epoch). Losses of complete datasets: \
                  training loss: $(training_loss), \
-                 testing loss: $(testing_loss)")
+                 testing loss: $(testing_loss).")
     end
     nnbp.nn = re(ps)
     nnbp.nn_params = Flux.params(nnbp.nn)
 end
 
 # Training using BFGS from Optimization.jl
+# I am using one of the Optimization.jl solvers, because I have not been able to
+# tackle this problem with the Flux solvers.
 function train_bfgs()
-    epochs = 10
+    epochs = 2
     ps, re = Flux.destructure(nnbp.nn)
     for epoch in 1:epochs
+        # Train through batches
+        i = 1
         global time_fitting += Base.@elapsed for ((bs_e, es), (bs_f, dbs_f, fs)) in
                                                   zip(train_loader_e, train_loader_f)
-                loss(ps, p) = loss(potential_energy.(bs_e, [ps], [re]), es, 
-                                   force.(bs_f, dbs_f, [ps], [re]), fs)
-                dlossdps = OptimizationFunction(loss, Optimization.AutoForwardDiff()) # Optimization.AutoZygote()
-                prob = OptimizationProblem(dlossdps, ps, []) #prob = remake(prob,u0=sol.minimizer)
-                callback = function (p, l)
-                    println("Current training loss is: $l")
-                    return false
-                end
-                sol = solve(prob, BFGS(), callback=callback, maxiters=50) # reltol = 1e-14, maxiters=1e11)
-                global ps = sol.u
+            batch_loss(ps, p) = loss(potential_energy.(bs_e, [ps], [re]), es, 
+                                     force.(bs_f, dbs_f, [ps], [re]), fs)
+            dbatchlossdps = OptimizationFunction(batch_loss,
+                                                 Optimization.AutoForwardDiff()) # Optimization.AutoZygote()
+            prob = OptimizationProblem(dbatchlossdps, ps, []) # prob = remake(prob,u0=sol.minimizer)
+            callback = function (p, l)
+                println("Epoch: $(epoch), batch: $i, training loss: $l")
+                push!(batch_train_losses, l)
+                return false
+            end
+            sol = solve(prob, BFGS(), callback=callback, maxiters=30) # reltol = 1e-14
+            ps = sol.u
+            i = i + 1
         end
         
         # Report losses
@@ -332,9 +352,11 @@ function train_bfgs()
                                   force.(bs_f, dbs_f, [ps], [re]), fs)
                               for ((bs_e, es), (bs_f, dbs_f, fs)) in
                                   zip(test_loader_e, test_loader_f)])
-        println("Epoch: $(epoch), \
+        push!(training_losses, training_loss)
+        push!(testing_losses, testing_loss)
+        println("Epoch $(epoch). Losses of complete datasets: \
                  training loss: $(training_loss), \
-                 testing loss: $(testing_loss)")
+                 testing loss: $(testing_loss).")
     end
     nnbp.nn = re(ps)
     nnbp.nn_params = Flux.params(nnbp.nn)
@@ -359,9 +381,6 @@ train_bfgs()
 #    nnbp.nn = re(ps)
 #    nnbp.nn_params = Flux.params(nnbp.nn)
 #end
-
-println("time_fitting:", time_fitting)
-
 
 #-------------------------------------------------------------------------------
 ## Training using BFGS and data parallelism with Base.Threads
@@ -406,10 +425,17 @@ println("time_fitting:", time_fitting)
 #ProfileView.view(data[1], lidict=data[2])
 #-------------------------------------------------------------------------------
 
+println("time_fitting:", time_fitting)
+
+write(experiment_path*"batch_train_losses.dat", "$(batch_train_losses)")
+write(experiment_path*"training_losses.dat", "$(training_losses)")
+write(experiment_path*"testing_losses.dat", "$(testing_losses)")
 write(experiment_path*"params.dat", "$(nnbp.nn_params)")
 
 
 # Calculate predictions ########################################################
+# This section will feed PotentialLearning.jl
+
 e_train_pred = potential_energy.(B_train / B_ref, [nnbp]) * e_ref
 f_train_pred = force.(B_train_ext / B_ref, dB_train / dB_ref, [nnbp]) * f_ref
 e_test_pred = potential_energy.(B_test / B_ref, [nnbp]) * e_ref
@@ -418,6 +444,8 @@ f_test_pred_v = collect(eachcol(reshape(f_test_pred, 3, :)))
 
 
 # Calculate metrics ############################################################
+# This section will feed PotentialLearning.jl
+
 function calc_metrics(x_pred, x)
     x_mae = sum(abs.(x_pred .- x)) / length(x)
     x_rmse = sqrt(sum((x_pred .- x).^2) / length(x))
@@ -435,6 +463,8 @@ f_test_mean_cos = mean(f_test_cos)
 
 
 # Save results #################################################################
+# This section will feed user main script and/or PotentialLearning.jl
+
 dataset_filename = input["dataset_filename"]
 write(experiment_path*"results.csv", "dataset,\
                       n_systems,n_params,n_body,max_deg,r0,\
@@ -457,6 +487,7 @@ write(experiment_path*"results-short.csv", "dataset,\
                       n_systems,n_params,n_body,max_deg,r0,rcutoff,\
                       e_test_mae,e_test_rmse,\
                       f_test_mae,f_test_rmse,\
+                      f_test_mean_cos,\
                       B_time,dB_time,time_fitting
                       $(dataset_filename),\
                       $(n_systems),$(n_params),$(n_body),$(max_deg),$(r0),$(rcutoff),\
