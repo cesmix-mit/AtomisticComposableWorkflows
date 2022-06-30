@@ -28,27 +28,38 @@ using Plots
 # Load input parameters ########################################################
 # This section will feed user main script and/or PotentialLearning.jl
 if size(ARGS, 1) == 0
-    #input = ["fit-ahfo2-neural-ace/", "data/", "a-Hfo2-300K-NVT.extxyz",
-    #         "100", "2", "3", "1", "5", "1", "1", "1", "1"]
-    input = ["fit-ahfo2-neural-ace/", "data/", "a-Hfo2-300K-NVT.extxyz",
-             "100", "3", "3", "1", "5", "1", "1", "3", "0.1"]
-    #input = ["fit-TiO2-neural-ace/", "data/", "TiO2trainingset.xyz",
-    #         "100", "3", "3", "1", "5", "1", "1", "1", "1"]
+    # Define default input
+#    input = [ "100", "2", "3", "1", "5", "1", "1", "1", "1",
+#              "fit-ahfo2-neural-ace/", "data/", "a-Hfo2-300K-NVT.extxyz"]
+#    input = [ "100", "3", "3", "1", "5", "1", "1", "3", "0.1",
+#              "fit-ahfo2-neural-ace/", "data/", "a-Hfo2-300K-NVT.extxyz"]
+    input = [ "100", "3", "3", "1", "5", "1", "1", "1", "1",
+              "fit-TiO2-neural-ace-2/", "data/", 
+              "TiO2trainingset.xyz", "TiO2testset.xyz",]
 else
+    # Define input from ARGS
     input = ARGS
 end
-input = Dict( "experiment_path"     => input[1],
-              "dataset_path"        => input[2],
-              "dataset_filename"    => input[3],
-              "n_systems"           => parse(Int64, input[4]),
-              "n_body"              => parse(Int64, input[5]),
-              "max_deg"             => parse(Int64, input[6]),
-              "r0"                  => parse(Float64, input[7]),
-              "rcutoff"             => parse(Float64, input[8]),
-              "wL"                  => parse(Float64, input[9]),
-              "csp"                 => parse(Float64, input[10]),
-              "e_weight"            => parse(Float64, input[11]),
-              "f_weight"            => parse(Float64, input[12]))
+input1 = Dict( "n_systems"           => parse(Int64, input[1]),
+               "n_body"              => parse(Int64, input[2]),
+               "max_deg"             => parse(Int64, input[3]),
+               "r0"                  => parse(Float64, input[4]),
+               "rcutoff"             => parse(Float64, input[5]),
+               "wL"                  => parse(Float64, input[6]),
+               "csp"                 => parse(Float64, input[7]),
+               "e_weight"            => parse(Float64, input[8]),
+               "f_weight"            => parse(Float64, input[9]))
+if length(input[10:end]) == 3
+    input2 = Dict( "experiment_path"     => input[10],
+                   "dataset_path"        => input[11],
+                   "dataset_filename"    => input[12])
+else
+    input2 = Dict( "experiment_path"       => input[10],
+                   "dataset_path"          => input[11],
+                   "trainingset_filename"  => input[12],
+                   "testset_filename"      => input[13])
+end
+input = merge(input1, input2)
 
 
 # Create experiment folder #####################################################
@@ -61,22 +72,32 @@ write(experiment_path*"input.dat", "$input")
 # Load dataset #################################################################
 # This section will feed PotentialLearning.jl
 include("load-data.jl")
-filename = input["dataset_path"]*input["dataset_filename"]
-systems, energies, forces, stresses = load_data(filename,
-                                                max_entries = input["n_systems"])
 
-# Split into training and testing
-n_systems = length(systems)
-n_train = floor(Int, n_systems * 0.8)
-n_test  = n_systems - n_train
-rand_list = randperm(n_systems)
-train_index, test_index = rand_list[1:n_train], rand_list[n_train+1:n_systems]
-train_systems, train_energies, train_forces, train_stress =
-                             systems[train_index], energies[train_index],
-                             forces[train_index], stresses[train_index]
-test_systems, test_energies, test_forces, test_stress =
-                             systems[test_index], energies[test_index],
-                             forces[test_index], stresses[test_index]
+if "dataset_filename" in keys(input)
+    filename = input["dataset_path"]*input["dataset_filename"]
+    systems, energies, forces, stresses = load_data(filename,
+                                                    max_entries = input["n_systems"])
+    
+    # Split into training and testing
+    n_systems = length(systems)
+    n_train = floor(Int, n_systems * 0.8)
+    n_test  = n_systems - n_train
+    rand_list = randperm(n_systems)
+    train_index, test_index = rand_list[1:n_train], rand_list[n_train+1:n_systems]
+    train_systems, train_energies, train_forces, train_stress =
+                                 systems[train_index], energies[train_index],
+                                 forces[train_index], stresses[train_index]
+    test_systems, test_energies, test_forces, test_stress =
+                                 systems[test_index], energies[test_index],
+                                 forces[test_index], stresses[test_index]
+else
+    filename = input["dataset_path"]*input["trainingset_filename"]
+    train_systems, train_energies, train_forces, train_stresses =
+            load_data(filename, max_entries = input["n_systems"])
+    filename = input["dataset_path"]*input["testset_filename"]
+    test_systems, test_energies, test_forces, test_stresses =
+            load_data(filename, max_entries = input["n_systems"])
+end
 
 # Linearize energies and forces
 calc_F(forces) = vcat([vcat(vcat(f...)...) for f in forces]...)
@@ -99,7 +120,7 @@ r0 = input["r0"]
 rcutoff = input["rcutoff"]
 wL = input["wL"]
 csp = input["csp"]
-atomic_symbols = unique(atomic_symbol(systems[1]))
+atomic_symbols = unique(atomic_symbol(train_systems[1]))
 ibp_params = ACEParams(atomic_symbols, n_body, max_deg, wL, csp, r0, rcutoff)
 write(experiment_path*"ibp_params.dat", "$(ibp_params)")
 
@@ -338,7 +359,7 @@ function train_bfgs()
                 push!(batch_train_losses, l)
                 return false
             end
-            sol = solve(prob, BFGS(), callback=callback, maxiters=30) # reltol = 1e-14
+            sol = solve(prob, BFGS(), callback=callback, maxiters=40) # reltol = 1e-14
             ps = sol.u
             i = i + 1
         end
