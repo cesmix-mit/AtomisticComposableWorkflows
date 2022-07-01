@@ -1,6 +1,5 @@
 # This code will be used to enrich InteratomicPotentials.jl and InteratomicBasisPotentials.jl
 
-
 # Defining NNBP composed type and associated functions
 mutable struct NNBasisPotential <: AbstractPotential
     nn

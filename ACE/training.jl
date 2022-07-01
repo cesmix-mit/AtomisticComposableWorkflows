@@ -13,8 +13,8 @@ global_loss(loader_e, loader_f, w_e, w_f, ps, re) =
 # Batch training using Optimization.jl
 # I am using one of the Optimization.jl solvers, because I have not been able to
 # tackle this problem with the Flux solvers.
-function batch_train_opt(ps, re, opt, maxiters, train_loader_e, train_loader_f,
-                         w_e, w_f, epoch, train_losses_batches)
+function batch_train_opt!(ps, re, opt, maxiters, train_loader_e, train_loader_f,
+                          w_e, w_f, epoch, train_losses_batches)
     i = 1
     for ((bs_e, es), (bs_f, dbs_f, fs)) in zip(train_loader_e, train_loader_f)
         batch_loss(ps, p) = loss(potential_energy.(bs_e, [ps], [re]), es, w_e,
@@ -31,10 +31,11 @@ function batch_train_opt(ps, re, opt, maxiters, train_loader_e, train_loader_f,
         ps = sol.u
         i = i + 1
     end
+    return ps
 end
 
 # Batch training using Flux.jl
-function batch_train_flux(ps, re, opt, maxiters, train_loader_e, train_loader_f, w_e, w_f)
+function batch_train_flux!(ps, re, opt, maxiters, train_loader_e, train_loader_f, w_e, w_f)
     for ((bs_e, es), (bs_f, dbs_f, fs)) in zip(train_loader_e, train_loader_f)
         g = gradient(Flux.params(ps)) do
             loss(potential_energy.(bs_e, [ps], [re]), es, w_e,
@@ -42,10 +43,11 @@ function batch_train_flux(ps, re, opt, maxiters, train_loader_e, train_loader_f,
         end
         Flux.Optimise.update!(opt, Flux.params(ps), g, maxiters=maxiters)
     end
+    return ps
 end
 
 # Training
-function train(  lib, nnbp, epochs, opt, maxiters, train_loader_e, train_loader_f,
+function train!( lib, nnbp, epochs, opt, maxiters, train_loader_e, train_loader_f,
                  test_loader_e, test_loader_f, w_e, w_f)
 
     train_losses_epochs = []; test_losses_epochs = []; train_losses_batches = []
@@ -54,11 +56,11 @@ function train(  lib, nnbp, epochs, opt, maxiters, train_loader_e, train_loader_
     
         # TODO: use multiple dispatch here?
         if lib == "Flux.jl"
-            batch_train_flux(ps, re, opt, maxiters, train_loader_e,
-                             train_loader_f, w_e, w_f, epoch, train_losses_batches)
+            ps = batch_train_flux!(ps, re, opt, maxiters, train_loader_e,
+                                   train_loader_f, w_e, w_f, epoch, train_losses_batches)
         else # lib == "Optimization.jl"
-            batch_train_opt(ps, re, opt, maxiters, train_loader_e,
-                            train_loader_f, w_e, w_f, epoch, train_losses_batches)
+            ps = batch_train_opt!(ps, re, opt, maxiters, train_loader_e,
+                                  train_loader_f, w_e, w_f, epoch, train_losses_batches)
         end
         
         # Report losses
