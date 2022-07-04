@@ -119,8 +119,17 @@ f_test_pred = dB_test * β
 
 
 # Post-process output: calculate metrics, save results and plots
-postproc( input, e_train_pred, e_train, f_train_pred, f_train,
-          e_test_pred, e_test, f_test_pred, f_test,
-          n_params, B_time, dB_time, time_fitting)
+metrics = get_metrics( e_train_pred, e_train, f_train_pred, f_train,
+                       e_test_pred, e_test, f_test_pred, f_test,
+                       B_time, dB_time, time_fitting)
+@savevar path metrics
 
+e_test_plot = plot_energy(e_test_pred, e_test)
+@savevar path e_test_plot
+
+f_test_plot = plot_forces(f_test_pred, f_test)
+@savefig path f_test_plot
+
+f_test_cos = plot_cos(f_test_pred, f_test)
+@savefig path f_test_cos
 

@@ -20,10 +20,8 @@ function get_input()
     #              "ahfo2/", "data/", "a-Hfo2-300K-NVT.extxyz"]
     #    input = [ "80", "20", "3", "3", "1", "5", "1", "1", "3", "0.1",
     #              "ahfo2/", "data/", "a-Hfo2-300K-NVT.extxyz"]
-    #    input = [ "80", "20", "3", "3", "1", "5", "1", "1", "1", "1",
-    #              "TiO2/", "data/", "TiO2trainingset.xyz", "TiO2testset.xyz"]
         input = [ "80", "20", "3", "3", "1", "5", "1", "1", "1", "1",
-                  "TiO2/", "data/", "TiO2trainingset.xyz"]
+                  "TiO2/", "data/", "TiO2trainingset.xyz", "TiO2testset.xyz"]
     else
         # Define input from ARGS
         input = ARGS

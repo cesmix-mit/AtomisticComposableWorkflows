@@ -10,6 +10,7 @@ using Random
 using StaticArrays
 using Statistics 
 using StatsBase
+using DataFrames
 using Optimization
 using OptimizationOptimJL
 using ForwardDiff
@@ -102,14 +103,13 @@ train_loader_e, train_loader_f, test_loader_e, test_loader_f =
 
 # Train
 println("Training energies and forces...")
-lib = "Optimization.jl"; epochs = 10; opt = BFGS(); maxiters = 30
+lib = "Optimization.jl"; epochs = 1; opt = BFGS(); maxiters = 1; #lib = "Optimization.jl"; epochs = 30; opt = BFGS(); maxiters = 30
 w_e, w_f = input["w_e"], input["w_f"]
 time_fitting =
 @time @elapsed train_losses_epochs, test_losses_epochs, train_losses_batches = 
             train!( lib, nnbp, epochs, opt, maxiters, train_loader_e,
                     train_loader_f, test_loader_e, test_loader_f, w_e, w_f)
 
-println("time_fitting:", time_fitting)
 @savevar path train_losses_batches
 @savevar path train_losses_epochs
 @savevar path test_losses_epochs
@@ -124,8 +124,18 @@ f_test_pred = force.(B_test_ext, dB_test, [nnbp])
 
 
 # Post-process output: calculate metrics, save results and plots
-postproc( input, e_train_pred, e_train, f_train_pred, f_train,
-          e_test_pred, e_test, f_test_pred, f_test,
-          n_params, B_time, dB_time, time_fitting)
+metrics = get_metrics( e_train_pred, e_train, f_train_pred, f_train,
+                       e_test_pred, e_test, f_test_pred, f_test,
+                       B_time, dB_time, time_fitting)
+@savevar path metrics
+
+e_test_plot = plot_energy(e_test_pred, e_test)
+@savevar path e_test_plot
+
+f_test_plot = plot_forces(f_test_pred, f_test)
+@savefig path f_test_plot
+
+f_test_cos = plot_cos(f_test_pred, f_test)
+@savefig path f_test_cos
 
 
