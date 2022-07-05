@@ -1,4 +1,4 @@
-# This code will feed PotentialLearning.jl
+# This code will be added to PotentialLearning.jl
 
 # Define loss functions
 loss(es_pred, es, w_e, fs_pred, fs, w_f) =  w_e * Flux.Losses.mse(es_pred, es) +

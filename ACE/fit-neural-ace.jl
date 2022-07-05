@@ -11,6 +11,7 @@ using StaticArrays
 using Statistics 
 using StatsBase
 using DataFrames
+using OrderedCollections
 using Optimization
 using OptimizationOptimJL
 using ForwardDiff
@@ -32,13 +33,13 @@ include("utils.jl")
 
 
 # Load input parameters
-input = get_input()
+input = get_input(ARGS)
 
 
 # Create experiment folder
 path = "neural-ace-"*input["experiment_path"]
 run(`mkdir -p $path`)
-@savevar path input
+@savecsv path input
 
 
 # Load dataset
@@ -63,7 +64,7 @@ r0 = input["r0"]
 rcutoff = input["rcutoff"]
 wL = input["wL"]
 csp = input["csp"]
-atomic_symbols = unique(atomic_symbol(train_systems[1]))
+atomic_symbols = unique(atomic_symbol(first(train_systems)))
 ibp_params = ACEParams(atomic_symbols, n_body, max_deg, wL, csp, r0, rcutoff)
 @savevar path ibp_params
 
@@ -96,20 +97,20 @@ nnbp = NNBasisPotential(nn, nn_params, ibp_params)
 
 
 # Define batches
+n_batches = input["n_batches"]
 train_loader_e, train_loader_f, test_loader_e, test_loader_f = 
-               get_batches(B_train, B_train_ext, e_train, dB_train, f_train,
-                           B_test, B_test_ext, e_test, dB_test, f_test)
+       get_batches(n_batches, B_train, B_train_ext, e_train, dB_train, f_train,
+                   B_test, B_test_ext, e_test, dB_test, f_test)
 
 
 # Train
 println("Training energies and forces...")
-lib = "Optimization.jl"; epochs = 1; opt = BFGS(); maxiters = 1; #lib = "Optimization.jl"; epochs = 30; opt = BFGS(); maxiters = 30
+lib = "Optimization.jl"; epochs = 1; opt = BFGS(); maxiters = 1
 w_e, w_f = input["w_e"], input["w_f"]
 time_fitting =
 @time @elapsed train_losses_epochs, test_losses_epochs, train_losses_batches = 
             train!( lib, nnbp, epochs, opt, maxiters, train_loader_e,
                     train_loader_f, test_loader_e, test_loader_f, w_e, w_f)
-
 @savevar path train_losses_batches
 @savevar path train_losses_epochs
 @savevar path test_losses_epochs
@@ -123,14 +124,14 @@ e_test_pred = potential_energy.(B_test, [nnbp])
 f_test_pred = force.(B_test_ext, dB_test, [nnbp])
 
 
-# Post-process output: calculate metrics, save results and plots
+# Post-process output: calculate metrics, create plots, and save results
 metrics = get_metrics( e_train_pred, e_train, f_train_pred, f_train,
                        e_test_pred, e_test, f_test_pred, f_test,
                        B_time, dB_time, time_fitting)
-@savevar path metrics
+@savecsv path metrics
 
 e_test_plot = plot_energy(e_test_pred, e_test)
-@savevar path e_test_plot
+@savefig path e_test_plot
 
 f_test_plot = plot_forces(f_test_pred, f_test)
 @savefig path f_test_plot

@@ -1,6 +1,6 @@
-# This section will feed PotentialLearning.jl?
+# This code will be added to PotentialLearning.jl
 
-# Calculate main metrics
+# Calculate metrics
 function calc_metrics(x_pred, x)
     x_mae = sum(abs.(x_pred .- x)) / length(x)
     x_rmse = sqrt(sum((x_pred .- x).^2) / length(x))
@@ -8,7 +8,6 @@ function calc_metrics(x_pred, x)
     return x_mae, x_rmse, x_rsq
 end
 
-# Calculate all metrics
 function get_metrics( e_train_pred, e_train, f_train_pred, f_train,
                       e_test_pred, e_test, f_test_pred, f_test,
                       B_time, dB_time, time_fitting)
@@ -22,25 +21,28 @@ function get_metrics( e_train_pred, e_train, f_train_pred, f_train,
     f_test_cos = dot.(f_test_v, f_test_pred_v) ./ (norm.(f_test_v) .* norm.(f_test_pred_v))
     f_test_mean_cos = mean(f_test_cos)
 
-    metric_name = ["e_train_mae", "e_train_rmse", "e_train_rsq",
-                   "f_train_mae", "f_train_rmse", "f_train_rsq",
-                   "e_test_mae", "e_test_rmse", "e_test_rsq",
-                   "f_test_mae", "f_test_rmse", "f_test_rsq",
-                   "f_test_mean_cos", "B_time [s]", "dB_time [s]",
-                   "time_fitting [s]"]
-    metric_value = [e_train_mae, e_train_rmse, e_train_rsq, 
-                    f_train_mae, f_train_rmse, f_train_rsq,
-                    e_test_mae, e_test_rmse, e_test_rsq,
-                    f_test_mae, f_test_rmse, f_test_rsq,
-                    f_test_mean_cos, B_time, dB_time, time_fitting]
-                   
-    metrics = DataFrame(metric_name=metric_name, metric_value=metric_value)
+    metrics = OrderedDict()
+    metrics["e_train_mae"] = e_train_mae
+    metrics["e_train_rmse"] = e_train_rmse
+    metrics["e_train_rsq"] = e_train_rsq
+    metrics["f_train_mae"] = f_train_mae
+    metrics["f_train_rmse"] = f_train_rmse
+    metrics["f_train_rsq"] = f_train_rsq
+    metrics["e_test_mae"] = e_test_mae
+    metrics["e_test_rmse"] = e_test_rmse
+    metrics["e_test_rsq"] = e_test_rsq
+    metrics["f_test_mae"] = f_test_mae
+    metrics["f_test_rmse"] = f_test_rmse
+    metrics["f_test_rsq"] = f_test_rsq
+    metrics["f_test_mean_cos"] = f_test_mean_cos
+    metrics["B_time [s]"] = B_time
+    metrics["dB_time [s]"] = dB_time
+    metrics["time_fitting [s]"] =time_fitting
     
     return metrics
 end
 
 # Plot variables
-
 function plot_energy(e_pred, e_true)
     r0 = minimum(e_true); r1 = maximum(e_true); rs = (r1-r0)/10
     plot( e_true, e_pred, seriestype = :scatter, markerstrokewidth=0,

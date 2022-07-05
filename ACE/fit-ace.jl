@@ -12,6 +12,7 @@ using StatsBase
 using UnitfulAtomic
 using Unitful 
 using BenchmarkTools
+using CSV
 using Plots
 
 include("input.jl")
@@ -22,13 +23,13 @@ include("utils.jl")
 
 
 # Load input parameters
-input = get_input()
+input = get_input(ARGS)
 
 
 # Create experiment folder
-path = "ace-"*input["experiment_path"]
+path = "neural-ace-"*input["experiment_path"]
 run(`mkdir -p $path`)
-@savevar path input
+@savecsv path input
 
 
 # Load dataset
@@ -118,14 +119,14 @@ e_test_pred = B_test * β
 f_test_pred = dB_test * β
 
 
-# Post-process output: calculate metrics, save results and plots
+# Post-process output: calculate metrics, create plots, and save results
 metrics = get_metrics( e_train_pred, e_train, f_train_pred, f_train,
                        e_test_pred, e_test, f_test_pred, f_test,
                        B_time, dB_time, time_fitting)
-@savevar path metrics
+@savecsv path metrics
 
 e_test_plot = plot_energy(e_test_pred, e_test)
-@savevar path e_test_plot
+@savefig path e_test_plot
 
 f_test_plot = plot_forces(f_test_pred, f_test)
 @savefig path f_test_plot

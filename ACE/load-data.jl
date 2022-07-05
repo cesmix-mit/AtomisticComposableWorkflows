@@ -1,3 +1,5 @@
+# This code will be added to PotentialLearning.jl
+
 function load_data(file; max_entries = 2000, T = Float64)
     systems  = AbstractSystem[]
     energies = T[]
