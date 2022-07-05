@@ -27,7 +27,7 @@ input = get_input(ARGS)
 
 
 # Create experiment folder
-path = "neural-ace-"*input["experiment_path"]
+path = "ace-"*input["experiment_path"]
 run(`mkdir -p $path`)
 @savecsv path input
 

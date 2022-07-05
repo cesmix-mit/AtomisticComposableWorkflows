@@ -21,24 +21,22 @@ function get_metrics( e_train_pred, e_train, f_train_pred, f_train,
     f_test_cos = dot.(f_test_v, f_test_pred_v) ./ (norm.(f_test_v) .* norm.(f_test_pred_v))
     f_test_mean_cos = mean(f_test_cos)
 
-    metrics = OrderedDict()
-    metrics["e_train_mae"] = e_train_mae
-    metrics["e_train_rmse"] = e_train_rmse
-    metrics["e_train_rsq"] = e_train_rsq
-    metrics["f_train_mae"] = f_train_mae
-    metrics["f_train_rmse"] = f_train_rmse
-    metrics["f_train_rsq"] = f_train_rsq
-    metrics["e_test_mae"] = e_test_mae
-    metrics["e_test_rmse"] = e_test_rmse
-    metrics["e_test_rsq"] = e_test_rsq
-    metrics["f_test_mae"] = f_test_mae
-    metrics["f_test_rmse"] = f_test_rmse
-    metrics["f_test_rsq"] = f_test_rsq
-    metrics["f_test_mean_cos"] = f_test_mean_cos
-    metrics["B_time [s]"] = B_time
-    metrics["dB_time [s]"] = dB_time
-    metrics["time_fitting [s]"] =time_fitting
-    
+    metrics = OrderedDict(  "e_train_mae"      => e_train_mae,
+                            "e_train_rmse"     => e_train_rmse,
+                            "e_train_rsq"      => e_train_rsq,
+                            "f_train_mae"      => f_train_mae,
+                            "f_train_rmse"     => f_train_rmse,
+                            "f_train_rsq"      => f_train_rsq,
+                            "e_test_mae"       => e_test_mae,
+                            "e_test_rmse"      => e_test_rmse,
+                            "e_test_rsq"       => e_test_rsq,
+                            "f_test_mae"       => f_test_mae,
+                            "f_test_rmse"      => f_test_rmse,
+                            "f_test_rsq"       => f_test_rsq,
+                            "f_test_mean_cos"  => f_test_mean_cos,
+                            "B_time [s]"       => B_time,
+                            "dB_time [s]"      => dB_time,
+                            "time_fitting [s]" => time_fitting)
     return metrics
 end
 

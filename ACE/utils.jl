@@ -8,7 +8,7 @@ macro savevar(path, var)
 end
 
 macro savecsv(path, var)
-    return :( CSV.write("$(path)" * $(string(var)) * ".csv", $(var)) )
+    return :( CSV.write("$(path)" * $(string(var)) * ".csv", $(var), header = false) )
 end
 
 macro savefig(path, var)
