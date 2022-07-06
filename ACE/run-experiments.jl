@@ -81,16 +81,18 @@ run(`mkdir $experiments_path`)
 for params in product(dataset_path, trainingset_filename, testset_filename,
                       n_train_sys, n_test_sys, n_batches,
                       n_body, max_deg, r0, rcutoff, wL, csp, w_e, w_f)
-    print("Launching experiment: $params\n")
+    print("Launching experiment with parameters: ")
     currexp_path = reduce(*,map(s->"$s"*"-", params[2:end]))[1:end-1]
-    params = "$(labels[1]) $experiments_path/$currexp_path " * 
-              reduce(*, ["$l $p " for (l, p) in zip(labels[2:end], params)])
-
+    params = vcat(["$(labels[1])", "$experiments_path$currexp_path/"],
+                   vcat([ ["$l", "$p"] for (l, p) in zip(labels[2:end], params)]...))
+    println("$params")
+    
     # Serial execution
     run(Cmd(`julia $juliafile $params`, dir="./"));
 
-    # Parallel execution: if the number of parallel experiments is high it may degrade performance.
-    #@async run(Cmd(`nohup julia ../../$juliafile $params`, dir="$experiments_path/$currexp_path"));
+    # Parallel execution: a high number of parallel experiments may degrade performance.
+    #@async run(Cmd(`nohup julia $juliafile $params`, dir="./"));
+    println("")
 end
 
 print("Run ./gather-results.sh after all the experiments are finished.\n")
