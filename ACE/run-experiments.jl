@@ -1,3 +1,11 @@
+# Run multiple fitting experiments in serial or parallel.
+#
+# 1. Update parameters ranges in run-experiments.jl
+# 2. Run: $ julia run-experiments.jl
+# 3. After all experiments have been completed, run the following script to gather
+#    the results into a single csv: $ ./gather-results.sh
+#
+
 using IterTools
 
 # Parameter labels
@@ -16,6 +24,10 @@ labels = [  "experiment_path",
             "csp",
             "w_e",
             "w_f"]
+
+
+# Parallel execution. Warning: a high number of parallel experiments may degrade system performance.
+parallel = false
 
 # Experiment folder
 experiments_path = "experiments/"
@@ -87,11 +99,12 @@ for params in product(dataset_path, trainingset_filename, testset_filename,
                    vcat([ ["$l", "$p"] for (l, p) in zip(labels[2:end], params)]...))
     println("$params")
     
-    # Serial execution
-    run(Cmd(`julia $juliafile $params`, dir="./"));
+    if parallel
+        @async run(Cmd(`nohup julia $juliafile $params`, dir="./"));
+    else
+        run(Cmd(`julia $juliafile $params`, dir="./"));
+    end
 
-    # Parallel execution: a high number of parallel experiments may degrade performance.
-    #@async run(Cmd(`nohup julia $juliafile $params`, dir="./"));
     println("")
 end
 
