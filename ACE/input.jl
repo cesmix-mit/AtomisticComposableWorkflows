@@ -41,7 +41,7 @@ function get_input(args)
     end
     input = OrderedDict()
     for (key, val) in partition(args,2,2)
-         if tryparse(Float64, val) != nothing
+        if tryparse(Float64, val) != nothing
             if occursin(".", val)
                 val = parse(Float64, val)
             else
@@ -62,22 +62,22 @@ function load_dataset(input)
     # Split into training and testing
     if "dataset_filename" in keys(input)
         filename = input["dataset_path"]*input["dataset_filename"]
-        systems, energies, forces, stresses =
+        systems, energies, forces, stress =
                                    load_data(filename, max_entries = n_sys)
         rand_list = randperm(n_sys)
         train_index, test_index = rand_list[1:n_train_sys], rand_list[n_train_sys+1:n_sys]
         train_systems, train_energies, train_forces, train_stress =
                                      systems[train_index], energies[train_index],
-                                     forces[train_index], stresses[train_index]
+                                     forces[train_index], stress[train_index]
         test_systems, test_energies, test_forces, test_stress =
                                      systems[test_index], energies[test_index],
-                                     forces[test_index], stresses[test_index]
+                                     forces[test_index], stress[test_index]
     else # The data set is already split.
         filename = input["dataset_path"]*input["trainingset_filename"]
-        train_systems, train_energies, train_forces, train_stresses =
+        train_systems, train_energies, train_forces, train_stress =
                 load_data(filename, max_entries = n_train_sys)
         filename = input["dataset_path"]*input["testset_filename"]
-        test_systems, test_energies, test_forces, test_stresses =
+        test_systems, test_energies, test_forces, test_stress =
                 load_data(filename, max_entries = n_test_sys)
     end
     return train_systems, train_energies, train_forces, train_stress,
@@ -86,8 +86,8 @@ end
 
 
 # Linearize energies and forces
-function linearize(train_systems, train_energies, train_forces, train_stresses,
-                   test_systems, test_energies, test_forces, test_stresses)
+function linearize(train_systems, train_energies, train_forces, train_stress,
+                   test_systems, test_energies, test_forces, test_stress)
     calc_F(forces) = vcat([vcat(vcat(f...)...) for f in forces]...)
     e_train = train_energies
     f_train = calc_F(train_forces)

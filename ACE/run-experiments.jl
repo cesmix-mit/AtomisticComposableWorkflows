@@ -1,7 +1,24 @@
 using IterTools
 
+# Parameter labels
+labels = [  "experiment_path",
+            "dataset_path",
+            "trainingset_filename",
+            "testset_filename",
+            "n_train_sys",
+            "n_test_sys",
+            "n_batches",
+            "n_body",
+            "max_deg",
+            "r0",
+            "rcutoff",
+            "wL",
+            "csp",
+            "w_e",
+            "w_f"]
+
 # Experiment folder
-experiments = "experiments/"
+experiments_path = "experiments/"
 
 # Fitting program
 juliafile = "fit-neural-ace.jl"
@@ -9,29 +26,35 @@ juliafile = "fit-neural-ace.jl"
 # Parameter definitions ########################################################
 
 # dataset path
-dataset_path = ["../../data/"]
+dataset_path = ["data/"]
 
-# dataset file
-dataset_filename = ["a-Hfo2-300K-NVT.extxyz", "HfO2_cpmd_train_0_94_11.xyz"]
+# datasets filename
+trainingset_filename = ["TiO2trainingset.xyz"]
+testset_filename = ["TiO2testset.xyz"]
 
-# n_systems: number of atomic configurations
-n_systems = 2000:2000
+# number of atomic configurations
+#n_systems = 100:100
+n_train_sys = 80:80
+n_test_sys = 20:20
+
+# number of batches per dataset
+n_batches = 8:8
 
 # n_body: body order. N: correlation order (N = n_body - 1)
 n_body = 2:5
 
 # max_deg: maximum polynomial degree
-max_deg = 3:6 
+max_deg = 3:6
 
 # r0: An estimate on the nearest-neighbour distance for scaling, JuLIP.rnn() 
 #     function returns element specific earest-neighbour distance
-r0 = 1:1 # ( rnn(:Hf) + rnn(:O) ) / 2.0 ?
+r0 = 1.0:1.0 # ( rnn(:Hf) + rnn(:O) ) / 2.0 ?
 
 # rin: inner cutoff radius
 # rin = 0.65*r0 is the default
 
 # rcutoff or rcut: outer cutoff radius
-rcutoff = 4:7
+rcutoff = 4.0:7.0
 
 # D: specifies the notion of polynomial degree for which there is no canonical
 #    definition in the multivariate setting. Here we use SparsePSHDegree which
@@ -45,22 +68,29 @@ csp = 0.5:0.5:1.5
 # pin: specifies the behaviour of the basis as the inner cutoff radius.
 # pin = 0 is the default.
 
-# e_weight: energy weight, used during fitting in normal equations
-e_weight = [1e-8, 1, 100]
+# w_e: energy weight, used during fitting in normal equations
+w_e = [1e-8, 1.0, 100.0]
 
-# f_weight: force weight, used during fitting in normal equations
-f_weight = [1e-8, 1, 100]
+# w_f: force weight, used during fitting in normal equations
+w_f = [1e-8, 1.0, 100.0]
 
 
 # Run experiments ##############################################################
 
-run(`mkdir $experiments`)
-for params in product(dataset_path, dataset_filename, n_systems, n_body,
-                      max_deg, r0, rcutoff, wL, csp, e_weight, f_weight)
+run(`mkdir $experiments_path`)
+for params in product(dataset_path, trainingset_filename, testset_filename,
+                      n_train_sys, n_test_sys, n_batches,
+                      n_body, max_deg, r0, rcutoff, wL, csp, w_e, w_f)
     print("Launching experiment: $params\n")
-    currexp = reduce(*,map(s->"$s"*"-", params[2:end]))[1:end-1]
-    run(`mkdir $experiments/$currexp`)
-    @async run(Cmd(`nohup julia ../../$juliafile ./ $params`, dir="$experiments/$currexp"));
+    currexp_path = reduce(*,map(s->"$s"*"-", params[2:end]))[1:end-1]
+    params = "$(labels[1]) $experiments_path/$currexp_path " * 
+              reduce(*, ["$l $p " for (l, p) in zip(labels[2:end], params)])
+
+    # Serial execution
+    run(Cmd(`julia $juliafile $params`, dir="./"));
+
+    # Parallel execution: if the number of parallel experiments is high it may degrade performance.
+    #@async run(Cmd(`nohup julia ../../$juliafile $params`, dir="$experiments_path/$currexp_path"));
 end
 
 print("Run ./gather-results.sh after all the experiments are finished.\n")

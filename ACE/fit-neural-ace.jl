@@ -37,20 +37,20 @@ input = get_input(ARGS)
 
 
 # Create experiment folder
-path = "neural-ace-"*input["experiment_path"]
+path = input["experiment_path"] # "neural-ace-"*input["experiment_path"]
 run(`mkdir -p $path`)
 @savecsv path input
 
 
 # Load dataset
-train_systems, train_energies, train_forces, train_stresses,
-test_systems, test_energies, test_forces, test_stresses = load_dataset(input)
+train_systems, train_energies, train_forces, train_stress,
+test_systems, test_energies, test_forces, test_stress = load_dataset(input)
 
 
 # Linearize energies and forces
 e_train, f_train, e_test, f_test =
-        linearize(train_systems, train_energies, train_forces, train_stresses,
-                  test_systems, test_energies, test_forces, test_stresses)
+        linearize(train_systems, train_energies, train_forces, train_stress,
+                  test_systems, test_energies, test_forces, test_stress)
 @savevar path e_train
 @savevar path f_train
 @savevar path e_test
