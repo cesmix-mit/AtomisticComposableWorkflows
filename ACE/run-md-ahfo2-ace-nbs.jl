@@ -8,13 +8,13 @@ using NBodySimulator
 using BenchmarkTools
 using Plots
 
-include("load_data.jl")
+include("load-data.jl")
 
 experiment_path = "md-ahfo2-ace-nbs/"
 run(`mkdir -p $experiment_path`)
 
 # System #######################################################################
-systems, energies, forces, stresses = load_data("data/a-Hfo2-300K-NVT.extxyz")
+systems, energies, forces, stresses = load_data("data/a-Hfo2-300K-NVT.extxyz", max_entries = 1)
 N = length(systems[1])
 initial_system = systems[1]
 Δt = 1.0u"fs"
@@ -56,12 +56,13 @@ n_body = 5; max_deg = 4; r0 = 1; rcutoff = 5; wL = 1; csp = 1
     -47556.4588236927, 1.27954843002649e6, 468128.6553864279, -2109.27294651018,
     3323.0139252376966, 578750.1678740619, -168722.5431704862, 478445.57935367734]
 
-rpi_params = RPIParams([:Hf, :O], n_body, max_deg, wL, csp, r0, rcutoff)
-potential = RPI(β, rpi_params)
+ace_params = ACEParams([:Hf, :O], n_body, max_deg, wL, csp, r0, rcutoff)
+potential = ACE(β, ace_params)
 
-function InteratomicPotentials.energy_and_force(s::AbstractSystem, p::RPI)
-    B = evaluate_basis(s, rpi_params)
-    dB = evaluate_basis_d(s, rpi_params)
+# TODO: this function should be added to InteratomicBasisPotentials.jl?
+function InteratomicPotentials.energy_and_force(s::AbstractSystem, p::ACE)
+    B = evaluate_basis(s, ace_params)
+    dB = evaluate_basis_d(s, ace_params)
     e = austrip.(B' * p.coefficients * 1u"eV")
     f = [SVector(austrip.(d * p.coefficients .* 1u"eV/Å")...) for d in dB]
     return (; e, f)
@@ -76,10 +77,10 @@ result = @time simulate(initial_system, simulator, potential)
 
 # Results ######################################################################
 savefig(plot_temperature(result, 10),
-        experiment_path*"temp_hfo2_ace_nbs.svg")
+        experiment_path*"temp_ahfo2_ace_nbs.svg")
 savefig(plot_energy(result, 10),
-        experiment_path*"energy_hfo2_ace_nbs.svg")
+        experiment_path*"energy_ahfo2_ace_nbs.svg")
 savefig(plot_rdf(result, 1.0, Int(0.95 * steps)),
-        experiment_path*"rdf_hfo2_ace_nbs_rdf.svg")
-animate(result, experiment_path*"hfo2_ace_nbs.gif")
+        experiment_path*"rdf_ahfo2_ace_nbs_rdf.svg")
+animate(result, experiment_path*"ahfo2_ace_nbs.gif")
 

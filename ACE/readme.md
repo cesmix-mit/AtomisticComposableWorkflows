@@ -1,7 +1,7 @@
-## [WIP] Fit different DFT data sets using ACE/NeuralACE, and run an MD simulation.
+## [WIP] Fit different DFT data sets using ACE/NeuralACE, run multiple serial/parallel fitting experiments, and run an MD simulation.
 
 
-### Chose a DFT datasets
+### Chose a DFT dataset
 
 Choose a DFT dataset. Currently, this code accepts two `xyz` format files, one for training and one for testing. Examples can be obtained from the following urls.
 
@@ -11,7 +11,7 @@ Choose a DFT dataset. Currently, this code accepts two `xyz` format files, one f
  Marius Stan, Gábor Csányi, Chris Benmore & Álvaro Vázquez-Mayagoitia.
  DOI: 10.1038/s41524-020-00367-7.
  [Dataset url](https://github.com/argonne-lcf/active-learning-md/tree/master/data)
-- A Python Package For Training SNAP Interatomic Potentials for use in the LAMMPS molecular dynamics package. [Datasets url](https://github.com/FitSNAP/FitSNAP/tree/master/examples)
+- FitSNAP: A Python Package For Training SNAP Interatomic Potentials for use in the LAMMPS molecular dynamics package. [Datasets url](https://github.com/FitSNAP/FitSNAP/tree/master/examples)
 - CESMIX training data repository. [Datasets url](https://github.com/cesmix-mit/TrainingData)
 
 
@@ -46,7 +46,6 @@ $ julia fit-ace.jl  experiment_path         TiO2/ \
                     testset_filename        TiO2testset.xyz \
                     n_train_sys             80 \
                     n_test_sys              20 \
-                    n_batches               8 \
                     n_body                  3 \
                     max_deg                 3 \
                     r0                      1.0 \
@@ -57,7 +56,7 @@ $ julia fit-ace.jl  experiment_path         TiO2/ \
                     w_f                     1.0
 ```
 
-Analogous with ```fit-neural-ace.jl```
+To fit with `fit-neural-ace.jl` the process is analogous. In this case the number of batches must also be defined.
 
 In addition, you can run the experiments with the default parameters (the parameters shown above).
 
