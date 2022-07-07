@@ -85,15 +85,9 @@ function load_dataset(input)
 end
 
 
-# Linearize energies and forces
-function linearize(train_systems, train_energies, train_forces, train_stress,
-                   test_systems, test_energies, test_forces, test_stress)
-    calc_F(forces) = vcat([vcat(vcat(f...)...) for f in forces]...)
-    e_train = train_energies
-    f_train = calc_F(train_forces)
-    e_test = test_energies
-    f_test = calc_F(test_forces)
-    return e_train, f_train, e_test, f_test
+# Linearize forces
+function linearize_forces(forces)
+    return vcat([vcat(vcat(f...)...) for f in forces]...)
 end
 
 

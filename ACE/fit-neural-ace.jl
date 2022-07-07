@@ -43,14 +43,15 @@ run(`mkdir -p $path`)
 
 
 # Load dataset
-train_systems, train_energies, train_forces, train_stress,
-test_systems, test_energies, test_forces, test_stress = load_dataset(input)
+train_sys, e_train, f_train_v, s_train,
+test_sys, e_test, f_test_v, s_train = load_dataset(input)
 
 
-# Linearize energies and forces
-e_train, f_train, e_test, f_test =
-        linearize(train_systems, train_energies, train_forces, train_stress,
-                  test_systems, test_energies, test_forces, test_stress)
+# Linearize forces
+f_train = linearize_forces(f_train_v)
+f_test = linearize_forces(f_test_v)
+
+
 @savevar path e_train
 @savevar path f_train
 @savevar path e_test
@@ -64,7 +65,7 @@ r0 = input["r0"]
 rcutoff = input["rcutoff"]
 wL = input["wL"]
 csp = input["csp"]
-atomic_symbols = unique(atomic_symbol(first(train_systems)))
+atomic_symbols = unique(atomic_symbol(first(train_sys)))
 ibp_params = ACEParams(atomic_symbols, n_body, max_deg, wL, csp, r0, rcutoff)
 @savevar path ibp_params
 
@@ -74,14 +75,14 @@ calc_B(sys) = evaluate_basis.(sys, [ibp_params])
 calc_dB(sys) = [ dBs_comp for dBs_sys in evaluate_basis_d.(sys, [ibp_params])
                           for dBs_atom in dBs_sys
                           for dBs_comp in eachrow(dBs_atom)]
-B_time = @time @elapsed B_train = calc_B(train_systems)
-dB_time = @time @elapsed dB_train = calc_dB(train_systems)
-B_test = calc_B(test_systems)
-dB_test = calc_dB(test_systems)
+B_time = @time @elapsed B_train = calc_B(train_sys)
+dB_time = @time @elapsed dB_train = calc_dB(train_sys)
+B_test = calc_B(test_sys)
+dB_test = calc_dB(test_sys)
 B_train_ext = vcat([ fill(B_train[i], 3length(position(s)))
-                     for (i,s) in enumerate(train_systems)]...)
+                     for (i,s) in enumerate(train_sys)]...)
 B_test_ext = vcat([ fill(B_test[i], 3length(position(s)))
-                    for (i,s) in enumerate(test_systems)]...)
+                    for (i,s) in enumerate(test_sys)]...)
 @savevar path B_train
 @savevar path dB_train
 @savevar path B_test
