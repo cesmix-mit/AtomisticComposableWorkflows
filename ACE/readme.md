@@ -1,4 +1,4 @@
-## [WIP] Fit different DFT data sets using ACE/NeuralACE, run multiple serial/parallel fitting experiments, and run an MD simulation.
+## [WIP] Fit different DFT datasets using ACE/NeuralACE, run multiple serial/parallel fitting experiments, and run an MD simulation.
 
 
 ### Chose a DFT dataset
@@ -73,7 +73,6 @@ $ julia fit-neural-ace.jl
 
 Modify the file `run-experiments.jl` to specify the parameter ranges needed to generate the experiments. E.g.
 ```julia
-
 # Parallel execution. Warning: a high number of parallel experiments may degrade system performance.
 parallel = true
 
@@ -101,11 +100,11 @@ $ ./gather-results.sh
 ### Run an MD simulation using the wrapper to Molly.jl or NBodySimulator.jl in Atomistic.jl
 
 ```bash
-$ run-md-hfo2-ace-nbs.jl
+$ run-md-ahfo2-ace-nbs.jl
 ```
 or
 ```bash
-$ run-md-hfo2-ace-molly.jl
+$ run-md-ahfo2-ace-molly.jl
 ```
 (Note: currently there is a bug in the second script) 
 
