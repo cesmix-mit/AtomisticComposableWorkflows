@@ -48,8 +48,7 @@ test_sys, e_test, f_test_v, s_train = load_dataset(input)
 
 
 # Linearize forces
-f_train = linearize_forces(f_train_v)
-f_test = linearize_forces(f_test_v)
+f_train, f_test = linearize_forces.([f_train_v, f_test_v])
 
 
 @savevar path e_train
