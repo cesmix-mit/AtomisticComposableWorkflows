@@ -19,6 +19,15 @@ using Plots
 include("input.jl")
 include("postproc.jl")
 
+# TODO: this function should be added to InteratomicBasisPotentials.jl?
+function InteratomicPotentials.energy_and_force(s::AbstractSystem, p::ACE)
+    B = evaluate_basis(s, p.basis_params)
+    dB = evaluate_basis_d(s, p.basis_params)
+    e = austrip.(B' * p.coefficients * 1u"eV")
+    f = [SVector(austrip.(d * p.coefficients .* 1u"eV/Å")...) for d in dB]
+    return (; e, f)
+end
+
 
 # TODO: use DFTK.jl
 function get_dft_data(input)
@@ -32,39 +41,32 @@ function retrain(md_res)
 end
 
 
-# TODO: this function should be added to InteratomicBasisPotentials.jl?
-function InteratomicPotentials.energy_and_force(s::AbstractSystem, p::ACE)
-    B = evaluate_basis(s, p.basis_params)
-    dB = evaluate_basis_d(s, p.basis_params)
-    e = austrip.(B' * p.coefficients * 1u"eV")
-    f = [SVector(austrip.(d * p.coefficients .* 1u"eV/Å")...) for d in dB]
-    return (; e, f)
-end
-
-
 # Load input parameters
-args = ["experiment_path",      "a-HfO2/",
-        "dataset_path",         "data/",
-        "dataset_filename",     "a-Hfo2-300K-NVT.extxyz",
-        "n_train_sys",          "80",
-        "n_test_sys",           "20",
-        "n_body",               "3",
-        "max_deg",              "3",
-        "r0",                   "1.0",
-        "rcutoff",              "5.0",
-        "wL",                   "1.0",
-        "csp",                  "1.0",
-        "w_e",                  "1.0",
-        "w_f",                  "1.0", 
-        "steps",                "500",
-        "ref_temp",             "300.0",
-        "delta_t",              "1.0",
-        "delta_step",           "100"]
-input = get_input(args)
+function get_defaults_args()
+    args = ["experiment_path",      "active-learning-a-HfO2/",
+            "dataset_path",         "data/",
+            "dataset_filename",     "a-Hfo2-300K-NVT.extxyz",
+            "n_train_sys",          "80",
+            "n_test_sys",           "20",
+            "n_body",               "3",
+            "max_deg",              "3",
+            "r0",                   "1.0",
+            "rcutoff",              "5.0",
+            "wL",                   "1.0",
+            "csp",                  "1.0",
+            "w_e",                  "1.0",
+            "w_f",                  "1.0", 
+            "steps",                "500",
+            "ref_temp",             "300.0",
+            "delta_t",              "1.0",
+            "delta_step",           "100"]
+    return args
+end
+input = get_input(ARGS)
 
 
 # Create experiment folder
-path = "active-learning-"*input["experiment_path"]
+path = input["experiment_path"]
 run(`mkdir -p $path`)
 
 
@@ -130,7 +132,7 @@ while curr_steps < steps
         
         # Calculate metrics
         e_mae, e_rmse, e_rsq = calc_metrics(e_test_pred, e_test)
-        f_mae, f_rmse, f_rsq  = calc_metrics(e_test_pred, e_test)
+        f_mae, f_rmse, f_rsq  = calc_metrics(f_test_pred, f_test)
         
         
         # Analyze metrics, report, and take corrective actions.
@@ -160,7 +162,8 @@ while curr_steps < steps
 
 end
 
-# Results
+
+# Post-process and save results
 savefig(Atomistic.plot_temperature(md_res, 10), path*"temp.svg")
 savefig(Atomistic.plot_energy(md_res, 10), path*"energy.svg")
 savefig(Atomistic.plot_rdf(md_res, 1.0, Int(0.95 * steps)), path*"rdf.svg")

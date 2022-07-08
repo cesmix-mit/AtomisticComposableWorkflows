@@ -10,17 +10,18 @@ using Plots
 
 include("load-data.jl")
 
-experiment_path = "md-ahfo2-ace-nbs/"
-run(`mkdir -p $experiment_path`)
+path = "md-ahfo2-ace-nbs/"
+run(`mkdir -p $path`)
 
-# System #######################################################################
-systems, energies, forces, stresses = load_data("data/a-Hfo2-300K-NVT.extxyz", max_entries = 1)
-N = length(systems[1])
-initial_system = systems[1]
+# Load system ##################################################################
+systems, energies, forces, stresses = load_data("data/a-Hfo2-300K-NVT.extxyz", 
+                                                 max_entries = 1)
+init_sys = first(systems)
+N = length(init_sys)
 Δt = 1.0u"fs"
 
 
-# Thermostat ###################################################################
+# Define thermostat ############################################################
 reference_temp = 300.0u"K"
 ν = 10 / Δt # stochastic collision frequency
 thermostat = NBodySimulator.AndersenThermostat(austrip(reference_temp), austrip(ν))
@@ -29,11 +30,6 @@ thermostat = NBodySimulator.AndersenThermostat(austrip(reference_temp), austrip(
 
 
 # Create potential #############################################################
-#n_body = 2; max_deg = 3; r0 = 1; rcutoff = 5; wL = 1; csp = 1
-#β = [-1072.1312864239615, -415.4169141829893, -71.953485409436, 1958.9574772187705,
-#     -281.6558117872044, 630.2363590775907, -2041.0185474208306, 240.9014951656523,
-#     -660.3623178315258, 267.9793847831617, 129.99873251077383, 43.761861053870035]
-
 n_body = 5; max_deg = 4; r0 = 1; rcutoff = 5; wL = 1; csp = 1
 β = [289.03539163140346, 243.48118376283978, 108.90687137892282, 21.886754309434895,
      1986.9255669490472, -1105.3139909481295, 150.91277245090194, -316.3360361622922,
@@ -55,9 +51,8 @@ n_body = 5; max_deg = 4; r0 = 1; rcutoff = 5; wL = 1; csp = 1
     -62707.27537257265, -4431.574887872929, 747733.750387841, 322994.9457702594,
     -47556.4588236927, 1.27954843002649e6, 468128.6553864279, -2109.27294651018,
     3323.0139252376966, 578750.1678740619, -168722.5431704862, 478445.57935367734]
-
 ace_params = ACEParams([:Hf, :O], n_body, max_deg, wL, csp, r0, rcutoff)
-potential = ACE(β, ace_params)
+ace = ACE(β, ace_params)
 
 # TODO: this function should be added to InteratomicBasisPotentials.jl?
 function InteratomicPotentials.energy_and_force(s::AbstractSystem, p::ACE)
@@ -69,18 +64,15 @@ function InteratomicPotentials.energy_and_force(s::AbstractSystem, p::ACE)
 end
 
 
-# Simulation ###################################################################
+# Run MD simulation ############################################################
 steps = 500 # 100_000
-simulator = NBSimulator(Δt, steps, thermostat = thermostat)
-result = @time simulate(initial_system, simulator, potential)
+sim = NBSimulator(Δt, steps, thermostat = thermostat)
+md_res = @time simulate(init_sys, sim, ace)
 
 
-# Results ######################################################################
-savefig(plot_temperature(result, 10),
-        experiment_path*"temp_ahfo2_ace_nbs.svg")
-savefig(plot_energy(result, 10),
-        experiment_path*"energy_ahfo2_ace_nbs.svg")
-savefig(plot_rdf(result, 1.0, Int(0.95 * steps)),
-        experiment_path*"rdf_ahfo2_ace_nbs_rdf.svg")
-animate(result, experiment_path*"ahfo2_ace_nbs.gif")
+# Post-process and save results ################################################
+savefig(plot_temperature(md_res, 10), path*"temp.svg")
+savefig(plot_energy(md_res, 10), path*"energy.svg")
+savefig(plot_rdf(md_res, 1.0, Int(0.95 * steps)), path*"rdf.svg")
+animate(md_res, path*"anim.gif")
 
