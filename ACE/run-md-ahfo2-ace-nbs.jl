@@ -61,8 +61,8 @@ potential = ACE(β, ace_params)
 
 # TODO: this function should be added to InteratomicBasisPotentials.jl?
 function InteratomicPotentials.energy_and_force(s::AbstractSystem, p::ACE)
-    B = evaluate_basis(s, ace_params)
-    dB = evaluate_basis_d(s, ace_params)
+    B = evaluate_basis(s, p.basis_params)
+    dB = evaluate_basis_d(s, p.basis_params)
     e = austrip.(B' * p.coefficients * 1u"eV")
     f = [SVector(austrip.(d * p.coefficients .* 1u"eV/Å")...) for d in dB]
     return (; e, f)

@@ -34,8 +34,8 @@ end
 
 # TODO: this function should be added to InteratomicBasisPotentials.jl?
 function InteratomicPotentials.energy_and_force(s::AbstractSystem, p::ACE)
-    B = evaluate_basis(s, ace_params)
-    dB = evaluate_basis_d(s, ace_params)
+    B = evaluate_basis(s, p.basis_params)
+    dB = evaluate_basis_d(s, p.basis_params)
     e = austrip.(B' * p.coefficients * 1u"eV")
     f = [SVector(austrip.(d * p.coefficients .* 1u"eV/Å")...) for d in dB]
     return (; e, f)
@@ -43,10 +43,9 @@ end
 
 
 # Load input parameters
-args = ["experiment_path",      "TiO2/",
+args = ["experiment_path",      "a-HfO2/",
         "dataset_path",         "data/",
-        "trainingset_filename", "TiO2trainingset.xyz",
-        "testset_filename",     "TiO2testset.xyz",
+        "dataset_filename",     "a-Hfo2-300K-NVT.extxyz",
         "n_train_sys",          "80",
         "n_test_sys",           "20",
         "n_body",               "3",
@@ -149,22 +148,22 @@ while curr_steps < steps
 
     # Run MD simulation
     if curr_steps == 0
-        curr_steps += Δstep
+        global curr_steps += Δstep
         init_sys = first(test_sys)
         sim = NBSimulator(Δt, curr_steps, thermostat = thermostat)
-        md_res = simulate(init_sys, sim, ace)
+        global md_res = simulate(init_sys, sim, ace)
     else
-        curr_steps += Δstep
+        global curr_steps += Δstep
         sim = NBSimulator(Δt, curr_steps, t₀=get_time(md_res))
-        md_res = simulate(get_system(md_res), sim, ace)
+        global md_res = simulate(get_system(md_res), sim, ace)
     end
 
 end
 
 # Results
-savefig(plot_temperature(md_res, 10), path*"temp.svg")
-savefig(plot_energy(md_res, 10), path*"energy.svg")
-savefig(plot_rdf(md_res, 1.0, Int(0.95 * steps)), path*"rdf.svg")
-animate(md_res, path*"anim.gif")
+savefig(Atomistic.plot_temperature(md_res, 10), path*"temp.svg")
+savefig(Atomistic.plot_energy(md_res, 10), path*"energy.svg")
+savefig(Atomistic.plot_rdf(md_res, 1.0, Int(0.95 * steps)), path*"rdf.svg")
+Atomistic.animate(md_res, path*"anim.gif")
 
 
