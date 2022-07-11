@@ -52,7 +52,7 @@ Examples of use can be found on the websites or github repositories of each tool
 
 ## Example: Fit different DFT datasets using ACE, run multiple serial/parallel fitting experiments, and run an MD simulation.
 
-Basic integrated example that allows you to fit DFT datasets with ACE and run an MD simulation.
+In the folder `ACE`, you will find a basic integrated example that allows you to fit DFT datasets with ACE and run an MD simulation.
 
 ### Chose a DFT dataset
 
@@ -186,47 +186,41 @@ $ run-md-ahfo2-ace-molly.jl
     ```bash
     $ julia
     ```
-2. Add General registry
+2. Add registries: General, CESMIX, and MolSim
     ```bash
     pkg>  registry add https://github.com/JuliaRegistries/General
-    ```
-3. Add CESMIX registry
-    ```bash
     pkg>  registry add https://github.com/cesmix-mit/CESMIX.git 
-    ```
-4. Add MolSim registry
-    ```bash
     pkg> registry add https://github.com/JuliaMolSim/MolSim.git
     ```
-5. Install common packages. E.g.
+3. Install general packages your workflow is likely to require. E.g.
     ```bash
     pkg> add LinearAlgebra
-    pkg> add Random
     pkg> add StaticArrays
-    pkg> add Statistics
-    pkg> add StatsBase
-    pkg> add Flux
-    pkg> add BSON
-    pkg> add CUDA
-    pkg> add Zygote
     pkg> add UnitfulAtomic
     pkg> add Unitful
     pkg> add BenchmarkTools
     pkg> add Plots
     ```
-6. Install CESMIX packages
+4. Install CESMIX packages
     ```bash
     pkg> add AtomsBase
     pkg> add InteratomicPotentials
     pkg> add InteratomicBasisPotentials
     pkg> add https://github.com/cesmix-mit/PotentialLearning.jl#refactor
     pkg> add Atomistic
+
     ```
-7. Install ACE (see: https://acesuit.github.io/ACE.jl/dev/gettingstarted/#Installation)
+5. Install other important dependencies
+    - MD simulators
+    ```
+    pkg> add Molly
+    pkg> add NBodySimulator
+    ```
+    - ACE (see: https://acesuit.github.io/ACE.jl/dev/gettingstarted/#Installation)
     ```bash
     pkg> add PyCall IJulia
     pkg> add ACE
     pkg> add JuLIP ASE ACEatoms
     pkg> add IPFitting
     ```
-    
+

@@ -3,23 +3,17 @@
 using AtomsBase
 using InteratomicPotentials 
 using InteratomicBasisPotentials
+using PotentialLearning
 using LinearAlgebra 
-using Random
 using StaticArrays
-using Statistics 
-using StatsBase
 using UnitfulAtomic
 using Unitful 
 using Atomistic
 using NBodySimulator
-using BenchmarkTools
-using CSV
 using Plots
 
-include("input.jl")
-include("postproc.jl")
 
-# TODO: this function should be added to InteratomicBasisPotentials.jl?
+# TODO: add to InteratomicBasisPotentials.jl?
 function InteratomicPotentials.energy_and_force(s::AbstractSystem, p::ACE)
     B = evaluate_basis(s, p.basis_params)
     dB = evaluate_basis_d(s, p.basis_params)
@@ -42,7 +36,7 @@ end
 
 
 # Load input parameters
-function get_defaults_args()
+function PotentialLearning.get_defaults_args()
     args = ["experiment_path",      "active-learning-a-HfO2/",
             "dataset_path",         "data/",
             "dataset_filename",     "a-Hfo2-300K-NVT.extxyz",
@@ -99,7 +93,7 @@ while curr_steps < steps
         ace_params = ACEParams(atomic_symbols, n_body, max_deg, wL, csp, r0, rcutoff)
 
 
-        # Calculate descriptors. Should it be added to PotentialLearning.jl?
+        # Calculate descriptors. TODO: Add to PotentialLearning.jl?
         calc_B(sys) = vcat((evaluate_basis.(sys, [ace_params])'...))
         calc_dB(sys) =
             vcat([vcat(d...) for d in evaluate_basis_d.(sys, [ace_params])]...)
@@ -109,12 +103,12 @@ while curr_steps < steps
         dB_test = calc_dB(test_sys)
 
 
-        # Calculate A and b. Should it be added to PotentialLearning.jl?
+        # Calculate A and b. TODO: Add to PotentialLearning.jl?
         A = [B_train; dB_train]
         b = [e_train; f_train]
 
 
-        # Calculate coefficients β. Should it be added to PotentialLearning.jl?
+        # Calculate coefficients β. TODO: Add to PotentialLearning.jl?
         w_e, w_f = input["w_e"], input["w_f"]
         Q = Diagonal([w_e * ones(length(e_train));
                       w_f * ones(length(f_train))])

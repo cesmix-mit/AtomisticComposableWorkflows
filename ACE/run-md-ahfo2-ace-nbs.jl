@@ -1,10 +1,10 @@
-using LinearAlgebra
-using StaticArrays
 using AtomsBase
 using InteratomicPotentials 
 using InteratomicBasisPotentials
 using Atomistic
 using NBodySimulator
+using LinearAlgebra
+using StaticArrays
 using BenchmarkTools
 using Plots
 

@@ -1,20 +1,8 @@
-# This code will be used to enrich InteratomicPotentials.jl, 
-# InteratomicBasisPotentials.jl, and PotentialLearning.jl.
-
 using AtomsBase
 using InteratomicPotentials 
 using InteratomicBasisPotentials
 using PotentialLearning
-using LinearAlgebra 
-using Random
-using StaticArrays
-using Statistics 
-using StatsBase
-using UnitfulAtomic
-using Unitful 
-using BenchmarkTools
-using CSV
-using Plots
+using LinearAlgebra
 
 
 # Load input parameters
@@ -54,7 +42,7 @@ ace_params = ACEParams(atomic_symbols, n_body, max_deg, wL, csp, r0, rcutoff)
 @savevar path ace_params
 
 
-# Calculate descriptors. TODO: add this to InteratomicBasisPotentials.jl?
+# Calculate descriptors. TODO: add this to PotentialLearning.jl?
 calc_B(sys) = vcat((evaluate_basis.(sys, [ace_params])'...))
 calc_dB(sys) =
     vcat([vcat(d...) for d in evaluate_basis_d.(sys, [ace_params])]...)
@@ -68,12 +56,12 @@ dB_test = calc_dB(test_sys)
 @savevar path dB_test
 
 
-# Calculate A and b
+# Calculate A and b.  TODO: add this to PotentialLearning.jl?
 time_fitting = Base.@elapsed begin
 A = [B_train; dB_train]
 b = [e_train; f_train]
 
-# Filter outliers
+# Filter outliers. TODO: add this to PotentialLearning.jl?
 #fmean = mean(f_train); fstd = std(f_train)
 #non_outliers = fmean - 2fstd .< f_train .< fmean + 2fstd 
 #f_train = f_train[non_outliers]
@@ -81,7 +69,7 @@ b = [e_train; f_train]
 #A = A[v , :]
 
 
-# Calculate coefficients β
+# Calculate coefficients β.  TODO: add this to PotentialLearning.jl?
 w_e, w_f = input["w_e"], input["w_f"]
 Q = Diagonal([w_e * ones(length(e_train));
               w_f * ones(length(f_train))])
@@ -89,7 +77,7 @@ Q = Diagonal([w_e * ones(length(e_train));
 
 end
 
-## Check weights
+## Check weights. TODO: add this to PotentialLearning.jl?
 #using IterTools
 #for (e_weight, f_weight) in product(1:10:100, 1:10:100)
 #    Q = Diagonal([e_weight * ones(length(e_train));
