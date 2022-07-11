@@ -4,6 +4,7 @@
 using AtomsBase
 using InteratomicPotentials 
 using InteratomicBasisPotentials
+using PotentialLearning
 using LinearAlgebra 
 using Random
 using StaticArrays
@@ -14,12 +15,6 @@ using Unitful
 using BenchmarkTools
 using CSV
 using Plots
-
-include("input.jl")
-include("NNBasisPotential.jl")
-include("training.jl")
-include("postproc.jl")
-include("utils.jl")
 
 
 # Load input parameters

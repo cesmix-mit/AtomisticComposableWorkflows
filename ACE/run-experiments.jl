@@ -33,7 +33,7 @@ parallel = false
 experiments_path = "experiments/"
 
 # Fitting program
-juliafile = "fit-neural-ace.jl"
+juliafile = "fit-ace.jl"
 
 # Parameter definitions ########################################################
 
