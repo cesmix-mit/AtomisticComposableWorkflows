@@ -219,6 +219,7 @@ $ run-md-ahfo2-ace-molly.jl
     pkg> add AtomsBase
     pkg> add InteratomicPotentials
     pkg> add InteratomicBasisPotentials
+    pkg> add https://github.com/cesmix-mit/PotentialLearning.jl#refactor
     pkg> add Atomistic
     ```
 7. Install ACE (see: https://acesuit.github.io/ACE.jl/dev/gettingstarted/#Installation)
