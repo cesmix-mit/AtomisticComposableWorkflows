@@ -6,21 +6,20 @@ using LinearAlgebra
 
 
 # Load input parameters
-args = ["experiment_path",      "ace-TiO2/",
+args = ["experiment_path",      "snap-TiO2/",
         "dataset_path",         "../data/",
         "trainingset_filename", "TiO2trainingset.xyz",
         "testset_filename",     "TiO2testset.xyz",
         "n_train_sys",          "80",
         "n_test_sys",           "20",
-        "n_batches",            "8",
-        "n_body",               "3",
-        "max_deg",              "3",
-        "r0",                   "1.0",
-        "rcutoff",              "5.0",
-        "wL",                   "1.0",
-        "csp",                  "1.0",
-        "w_e",                  "1.0",
-        "w_f",                  "1.0"]
+        "twojmax",              "4",
+        "rcutfac",              "1.2",
+        "radii",                "[1.5, 1.5]",
+        "rcut0",                "0.989",
+        "weight",               "[1.0, 1.0]",
+        "chem_flag",            "false",
+        "bzero_flag",           "false",
+        "bnorm_flag",           "false"]
 args = length(ARGS) > 0 ? ARGS : args
 input = get_input(args)
 
@@ -46,22 +45,26 @@ f_train, f_test = linearize_forces.([f_train_v, f_test_v])
 @savevar path f_test
 
 
-# Define ACE parameters
-n_body = input["n_body"]
-max_deg = input["max_deg"]
-r0 = input["r0"]
-rcutoff = input["rcutoff"]
-wL = input["wL"]
-csp = input["csp"]
+# Define SNAP parameters
+n_atoms = length(first(train_sys))
+twojmax = input["twojmax"]
+rcutfac = input["rcutfac"]
+radii = input["radii"]
+rcut0 = input["rcut0"]
+weight = input["weight"]
+chem_flag = input["chem_flag"]
+bzero_flag = input["bzero_flag"]
+bnorm_flag = input["bnorm_flag"]
 atomic_symbols = unique(atomic_symbol(first(train_sys)))
-ace_params = ACEParams(atomic_symbols, n_body, max_deg, wL, csp, r0, rcutoff)
-@savevar path ace_params
+snap_params = SNAPParams(n_atoms, twojmax, atomic_symbols, rcutfac, 0.00,
+                         rcut0, radii, weight, chem_flag, bzero_flag)
+@savevar path snap_params
 
 
 # Calculate descriptors. TODO: add this to PotentialLearning.jl?
-calc_B(sys) = vcat((evaluate_basis.(sys, [ace_params])'...))
+calc_B(sys) = vcat((evaluate_basis.(sys, [snap_params])'...))
 calc_dB(sys) =
-    vcat([vcat(d...) for d in evaluate_basis_d.(sys, [ace_params])]...)
+    vcat([vcat(d...) for d in evaluate_basis_d.(sys, [snap_params])]...)
 B_time = @time @elapsed B_train = calc_B(train_sys)
 dB_time = @time @elapsed dB_train = calc_dB(train_sys)
 B_test = calc_B(test_sys)
@@ -77,13 +80,6 @@ time_fitting = Base.@elapsed begin
 A = [B_train; dB_train]
 b = [e_train; f_train]
 
-# Filter outliers. TODO: add this to PotentialLearning.jl?
-#fmean = mean(f_train); fstd = std(f_train)
-#non_outliers = fmean - 2fstd .< f_train .< fmean + 2fstd 
-#f_train = f_train[non_outliers]
-#v = BitVector([ ones(length(e_train)); non_outliers])
-#A = A[v , :]
-
 
 # Calculate coefficients β.  TODO: add this to PotentialLearning.jl?
 w_e, w_f = input["w_e"], input["w_f"]
@@ -93,19 +89,6 @@ Q = Diagonal([w_e * ones(length(e_train));
 
 end
 
-## Check weights. TODO: add this to PotentialLearning.jl?
-#using IterTools
-#for (e_weight, f_weight) in product(1:10:100, 1:10:100)
-#    Q = Diagonal([e_weight * ones(length(e_train));
-#                  f_weight * ones(length(f_train))])
-#    try
-#        β = (A'*Q*A) \ (A'*Q*b)
-#        a = compute_errors(dB_test * β, f_test)
-#        println(e_weight,", ", f_weight, ", ", a[1])
-#    catch
-#        println("Exception with :", e_weight,", ", f_weight)
-#    end
-#end
 
 n_params = size(β,1)
 @savevar path β

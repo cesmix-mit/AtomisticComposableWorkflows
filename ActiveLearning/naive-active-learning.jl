@@ -36,27 +36,25 @@ end
 
 
 # Load input parameters
-function PotentialLearning.get_defaults_args()
-    args = ["experiment_path",      "active-learning-a-HfO2/",
-            "dataset_path",         "data/",
-            "dataset_filename",     "a-Hfo2-300K-NVT.extxyz",
-            "n_train_sys",          "80",
-            "n_test_sys",           "20",
-            "n_body",               "3",
-            "max_deg",              "3",
-            "r0",                   "1.0",
-            "rcutoff",              "5.0",
-            "wL",                   "1.0",
-            "csp",                  "1.0",
-            "w_e",                  "1.0",
-            "w_f",                  "1.0", 
-            "steps",                "500",
-            "ref_temp",             "300.0",
-            "delta_t",              "1.0",
-            "delta_step",           "100"]
-    return args
-end
-input = get_input(ARGS)
+args = ["experiment_path",      "active-learning-a-HfO2/",
+        "dataset_path",         "data/",
+        "dataset_filename",     "a-Hfo2-300K-NVT.extxyz",
+        "n_train_sys",          "80",
+        "n_test_sys",           "20",
+        "n_body",               "3",
+        "max_deg",              "3",
+        "r0",                   "1.0",
+        "rcutoff",              "5.0",
+        "wL",                   "1.0",
+        "csp",                  "1.0",
+        "w_e",                  "1.0",
+        "w_f",                  "1.0", 
+        "steps",                "500",
+        "ref_temp",             "300.0",
+        "delta_t",              "1.0",
+        "delta_step",           "100"]
+args = length(ARGS) > 0 ? ARGS : args
+input = get_input(args)
 
 
 # Create experiment folder
