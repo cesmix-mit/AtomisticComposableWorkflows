@@ -6,11 +6,27 @@ using LinearAlgebra
 
 
 # Load input parameters
-input = get_input(ARGS)
+args = ["experiment_path",      "ace-TiO2/",
+        "dataset_path",         "../data/",
+        "trainingset_filename", "TiO2trainingset.xyz",
+        "testset_filename",     "TiO2testset.xyz",
+        "n_train_sys",          "80",
+        "n_test_sys",           "20",
+        "n_batches",            "8",
+        "n_body",               "3",
+        "max_deg",              "3",
+        "r0",                   "1.0",
+        "rcutoff",              "5.0",
+        "wL",                   "1.0",
+        "csp",                  "1.0",
+        "w_e",                  "1.0",
+        "w_f",                  "1.0"]
+args = length(ARGS) > 0 ? ARGS : args
+input = get_input(args)
 
 
 # Create experiment folder
-path = "ace-"*input["experiment_path"]
+path = input["experiment_path"]
 run(`mkdir -p $path`)
 @savecsv path input
 

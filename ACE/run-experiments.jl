@@ -38,7 +38,7 @@ juliafile = "fit-ace.jl"
 # Parameter definitions ########################################################
 
 # dataset path
-dataset_path = ["data/"]
+dataset_path = ["../data/"]
 
 # datasets filename
 trainingset_filename = ["TiO2trainingset.xyz"]

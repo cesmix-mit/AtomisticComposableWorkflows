@@ -198,6 +198,9 @@ $ run-md-ahfo2-ace-molly.jl
     pkg> add StaticArrays
     pkg> add UnitfulAtomic
     pkg> add Unitful
+    pkg> add Flux
+    pkg> add Optimization
+    pkg> add OptimizationOptimJL
     pkg> add BenchmarkTools
     pkg> add Plots
     ```
