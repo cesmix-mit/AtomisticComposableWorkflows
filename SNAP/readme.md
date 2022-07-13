@@ -1,5 +1,5 @@
-## Fit different DFT datasets using SNAP, run multiple serial/parallel fitting experiments, and run an MD simulation.
+## Fit different DFT datasets using SNAP, run multiple serial/parallel fitting experiments.
 
 See main [readme](https://github.com/cesmix-mit/AtomisticComposableWorkflows) file for details.
 
-It is not finished yet.
+Work in progress. Currently, you can use `fit-snap-energies.jl`.
