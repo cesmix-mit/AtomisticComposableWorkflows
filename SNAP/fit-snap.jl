@@ -14,12 +14,16 @@ args = ["experiment_path",      "snap-TiO2/",
         "n_test_sys",           "20",
         "twojmax",              "4",
         "rcutfac",              "1.2",
-        "radii",                "[1.5, 1.5]",
+        "rmin0",                "0.0",
         "rcut0",                "0.989",
+        "radii",                "[1.5, 1.5]",
         "weight",               "[1.0, 1.0]",
         "chem_flag",            "false",
         "bzero_flag",           "false",
-        "bnorm_flag",           "false"]
+        "bnorm_flag",           "false",
+        "switch_flag",          "false",
+        "wselfall_flag",        "false",
+        "prebuilt_flag",        "false"]
 args = length(ARGS) > 0 ? ARGS : args
 input = get_input(args)
 
@@ -48,16 +52,21 @@ f_train, f_test = linearize_forces.([f_train_v, f_test_v])
 # Define SNAP parameters
 n_atoms = length(first(train_sys))
 twojmax = input["twojmax"]
+species = unique(atomic_symbol(first(train_sys)))
 rcutfac = input["rcutfac"]
-radii = input["radii"]
+rmin0 = input["rmin0"]
 rcut0 = input["rcut0"]
+radii = input["radii"]
 weight = input["weight"]
 chem_flag = input["chem_flag"]
 bzero_flag = input["bzero_flag"]
 bnorm_flag = input["bnorm_flag"]
-atomic_symbols = unique(atomic_symbol(first(train_sys)))
-snap_params = SNAPParams(n_atoms, twojmax, atomic_symbols, rcutfac, 0.00,
-                         rcut0, radii, weight, chem_flag, bzero_flag)
+switch_flag = input["switch_flag"]
+wselfall_flag = input["wselfall_flag"]
+prebuilt_flag = input["prebuilt_flag"]
+snap_params = SNAPParams(n_atoms, twojmax, species, rcutfac, rmin0, rcut0,
+                         radii, weight, chem_flag, bzero_flag, bnorm_flag,
+                         switch_flag, wselfall_flag, prebuilt_flag)
 @savevar path snap_params
 
 
