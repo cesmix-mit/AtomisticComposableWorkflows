@@ -31,13 +31,13 @@ end
 
 # TODO: analyze MD result and determine if retrain is needed
 function retrain(md_res)
-    return true
+    return length(md_res) == 0
 end
 
 
 # Load input parameters
 args = ["experiment_path",      "active-learning-a-HfO2/",
-        "dataset_path",         "data/",
+        "dataset_path",         "../data/",
         "dataset_filename",     "a-Hfo2-300K-NVT.extxyz",
         "n_train_sys",          "80",
         "n_test_sys",           "20",
@@ -68,9 +68,18 @@ steps = input["steps"]
 Δstep = input["delta_step"]
 curr_steps = 0
 md_res = []
+curr_steps_cp = 0
+md_res_cp = []
+potential = []
 while curr_steps < steps
 
     if retrain(md_res)
+        # Load checkpoint
+        global md_res, curr_steps, md_res_cp, curr_steps_cp
+        md_res = md_res_cp
+        curr_steps = curr_steps_cp
+
+
         # Generate DFT data
         train_sys, e_train, f_train_v, s_train,
         test_sys, e_test, f_test_v, s_train = get_dft_data(input)
@@ -113,8 +122,8 @@ while curr_steps < steps
         β = (A'*Q*A) \ (A'*Q*b)
         
         
-        # Define ACE
-        ace = ACE(β, ace_params)
+        # Define interatomic potential: ACE
+        global potential = ACE(β, ace_params)
         
         
         # Calculate predictions
@@ -131,6 +140,12 @@ while curr_steps < steps
         if e_mae > 1.0
             println("Warning: fitting error too high.")
         end
+
+    else
+        # Save checkpoint
+        global md_res, curr_steps, md_res_cp, curr_steps_cp
+        md_res_cp = md_res
+        curr_steps_cp = curr_steps
     end
 
 
@@ -142,15 +157,18 @@ while curr_steps < steps
 
     # Run MD simulation
     if curr_steps == 0
-        global curr_steps += Δstep
+        global md_res, curr_steps, potential
+        curr_steps += Δstep
         init_sys = first(test_sys)
         sim = NBSimulator(Δt, curr_steps, thermostat = thermostat)
-        global md_res = simulate(init_sys, sim, ace)
+        md_res = simulate(init_sys, sim, potential)
     else
-        global curr_steps += Δstep
+        global md_res, curr_steps, potential
+        curr_steps += Δstep
         sim = NBSimulator(Δt, curr_steps, t₀=get_time(md_res))
-        global md_res = simulate(get_system(md_res), sim, ace)
+        md_res = simulate(get_system(md_res), sim, potential)
     end
+
 
 end
 
