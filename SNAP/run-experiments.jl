@@ -44,12 +44,18 @@ trainingset_filename = ["TiO2trainingset.xyz"]
 testset_filename = ["TiO2testset.xyz"]
 
 # number of atomic configurations
-#n_systems = 100:100
 n_train_sys = 80:80
 n_test_sys = 20:20
 
-
-TODO: COMPLETE
+# TODO: COMPLETE
+twojmax = 1:5
+rcutfac = 1.0:1.5
+radii = "[1.5, 1.5]"
+rcut0 = 0.989:0.989
+weight = "[1.0, 1.0]"
+chem_flag = "false"
+bzero_flag = "false"
+bnorm_flag = "false"
 
 
 # Run experiments ##############################################################
