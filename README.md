@@ -56,7 +56,7 @@ In the folder `ACE`, you will find a basic integrated example that allows you to
 
 ### Chose a DFT dataset
 
-Choose a DFT dataset. Currently, this code accepts two `xyz` format files, one for training and one for testing. Examples can be obtained from the following urls.
+Choose a DFT dataset. Currently, this code accepts either two `xyz` files, one for training and one for testing, or a single `xyz` file, which is automatically split into training and testing. Example datasets can be downloaded from the following urls.
 
 - a-HfO2 dataset: "Machine-learned interatomic potentials by active learning:
  amorphous and liquid hafnium dioxide". Ganesh Sivaraman,
@@ -188,8 +188,8 @@ $ run-md-ahfo2-ace-molly.jl
     ```
 2. Add registries: General, CESMIX, and MolSim
     ```bash
-    pkg>  registry add https://github.com/JuliaRegistries/General
-    pkg>  registry add https://github.com/cesmix-mit/CESMIX.git 
+    pkg> registry add https://github.com/JuliaRegistries/General
+    pkg> registry add https://github.com/cesmix-mit/CESMIX.git 
     pkg> registry add https://github.com/JuliaMolSim/MolSim.git
     ```
 3. Install general packages your workflow is likely to require. E.g.
