@@ -64,16 +64,16 @@ bnorm_flag = input["bnorm_flag"]
 switch_flag = input["switch_flag"]
 wselfall_flag = input["wselfall_flag"]
 prebuilt_flag = input["prebuilt_flag"]
-snap_params = SNAPParams(n_atoms, twojmax, species, rcutfac, rmin0, rcut0,
-                         radii, weight, chem_flag, bzero_flag, bnorm_flag,
-                         switch_flag, wselfall_flag, prebuilt_flag)
-@savevar path snap_params
+params = SNAPParams(n_atoms, twojmax, species, rcutfac, rmin0, rcut0,
+                    radii, weight, chem_flag, bzero_flag, bnorm_flag,
+                    switch_flag, wselfall_flag, prebuilt_flag)
+@savevar path params
 
 
 # Calculate descriptors.
-calc_B(sys) = vcat((evaluate_basis.(sys, [snap_params])'...))
-B_time = @time @elapsed B_train = calc_B(train_sys)
-B_test = calc_B(test_sys)
+calc_B(pars, sys)  = vcat(evaluate_basis.(sys, [pars])'...)
+B_time = @time @elapsed B_train = calc_B(params, train_sys)
+B_test = calc_B(params, test_sys)
 @savevar path B_train
 @savevar path B_test
 

@@ -12,7 +12,6 @@ args = ["experiment_path",      "ace-TiO2/",
         "testset_filename",     "TiO2testset.xyz",
         "n_train_sys",          "80",
         "n_test_sys",           "20",
-        "n_batches",            "8",
         "n_body",               "3",
         "max_deg",              "3",
         "r0",                   "1.0",
@@ -54,18 +53,17 @@ rcutoff = input["rcutoff"]
 wL = input["wL"]
 csp = input["csp"]
 atomic_symbols = unique(atomic_symbol(first(train_sys)))
-ace_params = ACEParams(atomic_symbols, n_body, max_deg, wL, csp, r0, rcutoff)
-@savevar path ace_params
+params = ACEParams(atomic_symbols, n_body, max_deg, wL, csp, r0, rcutoff)
+@savevar path params
 
 
 # Calculate descriptors. TODO: add this to PotentialLearning.jl?
-calc_B(sys) = vcat((evaluate_basis.(sys, [ace_params])'...))
-calc_dB(sys) =
-    vcat([vcat(d...) for d in evaluate_basis_d.(sys, [ace_params])]...)
-B_time = @time @elapsed B_train = calc_B(train_sys)
-dB_time = @time @elapsed dB_train = calc_dB(train_sys)
-B_test = calc_B(test_sys)
-dB_test = calc_dB(test_sys)
+calc_B(pars, sys)  = vcat(evaluate_basis.(sys, [pars])'...)
+calc_dB(pars, sys) = vcat([hcat(evaluate_basis_d(s, pars)...)' for s in sys]...)
+B_time = @time @elapsed B_train = calc_B(params, train_sys)
+dB_time = @time @elapsed dB_train = calc_dB(params, train_sys)
+B_test = calc_B(params, test_sys)
+dB_test = calc_dB(params, test_sys)
 @savevar path B_train
 @savevar path dB_train
 @savevar path B_test
@@ -83,7 +81,6 @@ b = [e_train; f_train]
 #f_train = f_train[non_outliers]
 #v = BitVector([ ones(length(e_train)); non_outliers])
 #A = A[v , :]
-
 
 # Calculate coefficients β.  TODO: add this to PotentialLearning.jl?
 w_e, w_f = input["w_e"], input["w_f"]
@@ -107,7 +104,6 @@ end
 #    end
 #end
 
-n_params = size(β,1)
 @savevar path β
 
 

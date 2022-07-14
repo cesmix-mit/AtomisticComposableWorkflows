@@ -64,21 +64,20 @@ bnorm_flag = input["bnorm_flag"]
 switch_flag = input["switch_flag"]
 wselfall_flag = input["wselfall_flag"]
 prebuilt_flag = input["prebuilt_flag"]
-snap_params = SNAPParams(n_atoms, twojmax, species, rcutfac, rmin0, rcut0,
+params = SNAPParams(n_atoms, twojmax, species, rcutfac, rmin0, rcut0,
                          radii, weight, chem_flag, bzero_flag, bnorm_flag,
                          switch_flag, wselfall_flag, prebuilt_flag)
-@savevar path snap_params
+@savevar path params
 
 
 # Calculate descriptors. TODO: add this to PotentialLearning.jl?
 # TODO: fix error when using function `evaluate_basis_d`
-calc_B(sys) = vcat((evaluate_basis.(sys, [snap_params])'...))
-calc_dB(sys) =
-    vcat([vcat(d...) for d in evaluate_basis_d.(sys, [snap_params])]...)
-B_time = @time @elapsed B_train = calc_B(train_sys)
-dB_time = @time @elapsed dB_train = calc_dB(train_sys)
-B_test = calc_B(test_sys)
-dB_test = calc_dB(test_sys)
+calc_B(pars, sys)  = vcat(evaluate_basis.(sys, [pars])'...)
+calc_dB(pars, sys) = vcat([hcat(evaluate_basis_d(s, pars)...)' for s in sys]...)
+B_time = @time @elapsed B_train = calc_B(params, train_sys)
+dB_time = @time @elapsed dB_train = calc_dB(params, train_sys)
+B_test = calc_B(params, test_sys)
+dB_test = calc_dB(params, test_sys)
 @savevar path B_train
 @savevar path dB_train
 @savevar path B_test
