@@ -112,18 +112,11 @@ while curr_steps < steps
         dB_test = calc_dB(params, test_sys)
 
 
-        # Calculate A and b. TODO: Add to PotentialLearning.jl?
-        A = [B_train; dB_train]
-        b = [e_train; f_train]
-
-
-        # Calculate coefficients β. TODO: Add to PotentialLearning.jl?
+        # Calculate coefficients β
         w_e, w_f = input["w_e"], input["w_f"]
-        Q = Diagonal([w_e * ones(length(e_train));
-                      w_f * ones(length(f_train))])
-        β = (A'*Q*A) \ (A'*Q*b)
-        
-        
+        β = learn(B_train, dB_train, e_train, f_train, w_e, w_f)
+
+
         # Define interatomic potential: ACE
         global potential = ACE(β, params)
         

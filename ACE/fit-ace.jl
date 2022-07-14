@@ -70,11 +70,6 @@ dB_test = calc_dB(params, test_sys)
 @savevar path dB_test
 
 
-# Calculate A and b.  TODO: add this to PotentialLearning.jl?
-time_fitting = Base.@elapsed begin
-A = [B_train; dB_train]
-b = [e_train; f_train]
-
 # Filter outliers. TODO: add this to PotentialLearning.jl?
 #fmean = mean(f_train); fstd = std(f_train)
 #non_outliers = fmean - 2fstd .< f_train .< fmean + 2fstd 
@@ -82,28 +77,10 @@ b = [e_train; f_train]
 #v = BitVector([ ones(length(e_train)); non_outliers])
 #A = A[v , :]
 
-# Calculate coefficients β.  TODO: add this to PotentialLearning.jl?
+
+# Calculate coefficients β
 w_e, w_f = input["w_e"], input["w_f"]
-Q = Diagonal([w_e * ones(length(e_train));
-              w_f * ones(length(f_train))])
-β = (A'*Q*A) \ (A'*Q*b)
-
-end
-
-## Check weights. TODO: add this to PotentialLearning.jl?
-#using IterTools
-#for (e_weight, f_weight) in product(1:10:100, 1:10:100)
-#    Q = Diagonal([e_weight * ones(length(e_train));
-#                  f_weight * ones(length(f_train))])
-#    try
-#        β = (A'*Q*A) \ (A'*Q*b)
-#        a = compute_errors(dB_test * β, f_test)
-#        println(e_weight,", ", f_weight, ", ", a[1])
-#    catch
-#        println("Exception with :", e_weight,", ", f_weight)
-#    end
-#end
-
+time_fitting = Base.@elapsed β = learn(B_train, dB_train, e_train, f_train, w_e, w_f)
 @savevar path β
 
 

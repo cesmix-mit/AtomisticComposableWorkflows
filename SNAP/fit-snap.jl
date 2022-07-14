@@ -65,8 +65,8 @@ switch_flag = input["switch_flag"]
 wselfall_flag = input["wselfall_flag"]
 prebuilt_flag = input["prebuilt_flag"]
 params = SNAPParams(n_atoms, twojmax, species, rcutfac, rmin0, rcut0,
-                         radii, weight, chem_flag, bzero_flag, bnorm_flag,
-                         switch_flag, wselfall_flag, prebuilt_flag)
+                    radii, weight, chem_flag, bzero_flag, bnorm_flag,
+                    switch_flag, wselfall_flag, prebuilt_flag)
 @savevar path params
 
 
@@ -84,22 +84,9 @@ dB_test = calc_dB(params, test_sys)
 @savevar path dB_test
 
 
-# Calculate A and b.  TODO: add this to PotentialLearning.jl?
-time_fitting = Base.@elapsed begin
-A = [B_train; dB_train]
-b = [e_train; f_train]
-
-
-# Calculate coefficients β.  TODO: add this to PotentialLearning.jl?
+# Calculate coefficients β
 w_e, w_f = input["w_e"], input["w_f"]
-Q = Diagonal([w_e * ones(length(e_train));
-              w_f * ones(length(f_train))])
-β = (A'*Q*A) \ (A'*Q*b)
-
-end
-
-
-n_params = size(β,1)
+time_fitting = Base.@elapsed β = learn(B_train, dB_train, e_train, f_train, w_e, w_f)
 @savevar path β
 
 
