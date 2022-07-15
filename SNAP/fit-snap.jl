@@ -13,10 +13,10 @@ args = ["experiment_path",      "snap-TiO2/",
         "n_train_sys",          "80",
         "n_test_sys",           "20",
         "twojmax",              "4",
-        "rcutfac",              "1.2",
+        "rcutfac",              "6.0",
         "rmin0",                "0.0",
         "rcut0",                "0.989",
-        "radii",                "[1.5, 1.5]",
+        "radii",                "[6.0, 6.0]",
         "weight",               "[1.0, 1.0]",
         "chem_flag",            "false",
         "bzero_flag",           "false",
@@ -64,20 +64,26 @@ bnorm_flag = input["bnorm_flag"]
 switch_flag = input["switch_flag"]
 wselfall_flag = input["wselfall_flag"]
 prebuilt_flag = input["prebuilt_flag"]
-params = SNAPParams(n_atoms, twojmax, species, rcutfac, rmin0, rcut0,
-                    radii, weight, chem_flag, bzero_flag, bnorm_flag,
-                    switch_flag, wselfall_flag, prebuilt_flag)
-@savevar path params
+train_pars = [ SNAPParams(length(s), twojmax, species, rcutfac, rmin0, rcut0,
+                          radii, weight, chem_flag, bzero_flag, bnorm_flag,
+                          switch_flag, wselfall_flag, prebuilt_flag)
+               for s in train_sys ]
+test_pars = [ SNAPParams(length(s), twojmax, species, rcutfac, rmin0, rcut0,
+                         radii, weight, chem_flag, bzero_flag, bnorm_flag,
+                         switch_flag, wselfall_flag, prebuilt_flag)
+               for s in test_sys ]
+@savevar path first(train_pars)
 
 
 # Calculate descriptors. TODO: add this to PotentialLearning.jl?
-# TODO: fix error when using function `evaluate_basis_d`
-calc_B(pars, sys)  = vcat(evaluate_basis.(sys, [pars])'...)
-calc_dB(pars, sys) = vcat([hcat(evaluate_basis_d(s, pars)...)' for s in sys]...)
-B_time = @time @elapsed B_train = calc_B(params, train_sys)
-dB_time = @time @elapsed dB_train = calc_dB(params, train_sys)
-B_test = calc_B(params, test_sys)
-dB_test = calc_dB(params, test_sys)
+# TODO: fix incorrect energy block calculation of matrix A: n. cols of B_train is different from dB_train
+calc_B(sys, pars) = vcat(evaluate_basis.(sys, pars)'...)
+calc_dB(sys, pars) = vcat([hcat(evaluate_basis_d(s, p)...)'
+                           for (s,p) in zip(sys, pars)]...)
+B_time = @time @elapsed B_train = calc_B(train_sys, train_pars)
+dB_time = @time @elapsed dB_train = calc_dB(train_sys, train_pars)
+B_test = calc_B(test_sys, test_pars)
+dB_test = calc_dB(test_sys, test_pars)
 @savevar path B_train
 @savevar path dB_train
 @savevar path B_test
@@ -85,7 +91,7 @@ dB_test = calc_dB(params, test_sys)
 
 
 # Calculate coefficients β
-w_e, w_f = input["w_e"], input["w_f"]
+w_e, w_f = input["weight"][1], input["weight"][2]
 time_fitting = Base.@elapsed β = learn(B_train, dB_train, e_train, f_train, w_e, w_f)
 @savevar path β
 
