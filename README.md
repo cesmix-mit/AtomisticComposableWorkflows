@@ -2,7 +2,7 @@
 
 The Center for the Exascale Simulation of Materials in Extreme Environments ([CESMIX](https://computing.mit.edu/cesmix/)) is a new MIT research effort to advance the state-of-the-art in predictive simulation. It seeks to connect quantum and molecular simulations of materials with state-of-the-art programming languages, compiler technologies, and software performance engineering tools, underpinned by rigorous approaches to statistical inference and uncertainty quantification.
 
-This repository aims to gather case studies of interest to CESMIX implemented using the latest developments of the growing Julia atomistic ecosystem, integrated with other state-of-the-art tools. This is a work in progress and is not yet ready for production, however some of our examples can already be used.
+This repository aims to gather easy-to-use CESMIX-aligned case studies, integrating the latest developments of the Julia atomistic ecosystem with state-of-the-art tools. This is a work in progress and is not ready for production, however some of our examples can already be used.
 
 ## Atomistic composable workflows
 
@@ -209,9 +209,8 @@ $ run-md-ahfo2-ace-molly.jl
     pkg> add AtomsBase
     pkg> add InteratomicPotentials
     pkg> add InteratomicBasisPotentials
-    pkg> add https://github.com/cesmix-mit/PotentialLearning.jl#refactor
+    pkg> add https://github.com/cesmix-mit/PotentialLearning.jl
     pkg> add Atomistic
-
     ```
 5. Install other important dependencies
     - MD simulators
