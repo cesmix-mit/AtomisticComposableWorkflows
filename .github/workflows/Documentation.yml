@@ -24,13 +24,13 @@ jobs:
             Pkg.Registry.add(RegistrySpec(url = "https://github.com/JuliaMolSim/MolSim.git"))
           '
         shell: bash
-      - name: instantiate docs
-        run: |
-          julia --project=docs -e '
-            using Pkg
-            Pkg.develop(PackageSpec(path=pwd()))
-            Pkg.instantiate()
-          '
+#      - name: instantiate docs
+#        run: |
+#          julia --project=docs -e '
+#            using Pkg
+#            Pkg.develop(PackageSpec(path=pwd()))
+#            Pkg.instantiate()
+#          '
       - name: generate docs
         run: DISPLAY=:0 xvfb-run -s '-screen 0 1024x768x24' julia --project=docs docs/make.jl
         env:
