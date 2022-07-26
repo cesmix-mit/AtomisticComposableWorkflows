@@ -28,7 +28,7 @@ jobs:
         run: |
           julia --project=docs -e '
             using Pkg
-            Pkg.develop(PackageSpec(path=pwd()))
+            Pkg.activate(".")
             Pkg.instantiate()
           '
       - name: generate docs

@@ -1,8 +1,3 @@
-name = "AtomisticComposableWorkflows"
-uuid = "cc35e083-d561-4721-b4f8-aa88a094b881"
-authors = ["Julia Lab"]
-version = "0.1.0"
-
 [deps]
 ACE = "3e8ccfd2-c8b0-11ea-32f1-f3a5990fd77a"
 ACEatoms = "1e34e032-0b37-4839-a012-196b35408c3c"
