@@ -1,3 +1,6 @@
+Manifest.toml
+docs/build/
+docs/src/generated/
 LennardJones/fitting/compare_fits.jl
 LennardJones/fitting/fit_2d_basic_dpp.jl
 LennardJones/fitting/plot_dist_active_learning.jl

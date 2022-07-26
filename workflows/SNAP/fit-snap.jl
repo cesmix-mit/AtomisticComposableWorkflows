@@ -13,13 +13,17 @@ args = ["experiment_path",      "snap-TiO2/",
         "n_train_sys",          "80",
         "n_test_sys",           "20",
         "twojmax",              "4",
-        "rcutfac",              "1.2",
-        "radii",                "[1.5, 1.5]",
+        "rcutfac",              "6.0",
+        "rmin0",                "0.0",
         "rcut0",                "0.989",
+        "radii",                "[6.0, 6.0]",
         "weight",               "[1.0, 1.0]",
         "chem_flag",            "false",
         "bzero_flag",           "false",
-        "bnorm_flag",           "false"]
+        "bnorm_flag",           "false",
+        "switch_flag",          "false",
+        "wselfall_flag",        "false",
+        "prebuilt_flag",        "false"]
 args = length(ARGS) > 0 ? ARGS : args
 input = get_input(args)
 
@@ -48,50 +52,47 @@ f_train, f_test = linearize_forces.([f_train_v, f_test_v])
 # Define SNAP parameters
 n_atoms = length(first(train_sys))
 twojmax = input["twojmax"]
+species = unique(atomic_symbol(first(train_sys)))
 rcutfac = input["rcutfac"]
-radii = input["radii"]
+rmin0 = input["rmin0"]
 rcut0 = input["rcut0"]
+radii = input["radii"]
 weight = input["weight"]
 chem_flag = input["chem_flag"]
 bzero_flag = input["bzero_flag"]
 bnorm_flag = input["bnorm_flag"]
-atomic_symbols = unique(atomic_symbol(first(train_sys)))
-snap_params = SNAPParams(n_atoms, twojmax, atomic_symbols, rcutfac, 0.00,
-                         rcut0, radii, weight, chem_flag, bzero_flag)
-@savevar path snap_params
+switch_flag = input["switch_flag"]
+wselfall_flag = input["wselfall_flag"]
+prebuilt_flag = input["prebuilt_flag"]
+train_pars = [ SNAPParams(length(s), twojmax, species, rcutfac, rmin0, rcut0,
+                          radii, weight, chem_flag, bzero_flag, bnorm_flag,
+                          switch_flag, wselfall_flag, prebuilt_flag)
+               for s in train_sys ]
+test_pars = [ SNAPParams(length(s), twojmax, species, rcutfac, rmin0, rcut0,
+                         radii, weight, chem_flag, bzero_flag, bnorm_flag,
+                         switch_flag, wselfall_flag, prebuilt_flag)
+               for s in test_sys ]
+@savevar path first(train_pars)
 
 
 # Calculate descriptors. TODO: add this to PotentialLearning.jl?
-# TODO: fix error when using function `evaluate_basis_d`
-calc_B(sys) = vcat((evaluate_basis.(sys, [snap_params])'...))
-calc_dB(sys) =
-    vcat([vcat(d...) for d in evaluate_basis_d.(sys, [snap_params])]...)
-B_time = @time @elapsed B_train = calc_B(train_sys)
-dB_time = @time @elapsed dB_train = calc_dB(train_sys)
-B_test = calc_B(test_sys)
-dB_test = calc_dB(test_sys)
+# TODO: fix incorrect energy block calculation of matrix A: n. cols of B_train is different from dB_train
+calc_B(sys, pars) = vcat(evaluate_basis.(sys, pars)'...)
+calc_dB(sys, pars) = vcat([hcat(evaluate_basis_d(s, p)...)'
+                           for (s,p) in zip(sys, pars)]...)
+B_time = @time @elapsed B_train = calc_B(train_sys, train_pars)
+dB_time = @time @elapsed dB_train = calc_dB(train_sys, train_pars)
+B_test = calc_B(test_sys, test_pars)
+dB_test = calc_dB(test_sys, test_pars)
 @savevar path B_train
 @savevar path dB_train
 @savevar path B_test
 @savevar path dB_test
 
 
-# Calculate A and b.  TODO: add this to PotentialLearning.jl?
-time_fitting = Base.@elapsed begin
-A = [B_train; dB_train]
-b = [e_train; f_train]
-
-
-# Calculate coefficients β.  TODO: add this to PotentialLearning.jl?
-w_e, w_f = input["w_e"], input["w_f"]
-Q = Diagonal([w_e * ones(length(e_train));
-              w_f * ones(length(f_train))])
-β = (A'*Q*A) \ (A'*Q*b)
-
-end
-
-
-n_params = size(β,1)
+# Calculate coefficients β
+w_e, w_f = input["weight"][1], input["weight"][2]
+time_fitting = Base.@elapsed β = learn(B_train, dB_train, e_train, f_train, w_e, w_f)
 @savevar path β
 
 

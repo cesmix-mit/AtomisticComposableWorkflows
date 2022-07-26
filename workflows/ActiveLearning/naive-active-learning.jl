@@ -18,7 +18,7 @@ function InteratomicPotentials.energy_and_force(s::AbstractSystem, p::ACE)
     B = evaluate_basis(s, p.basis_params)
     dB = evaluate_basis_d(s, p.basis_params)
     e = austrip.(B' * p.coefficients * 1u"eV")
-    f = [SVector(austrip.(d * p.coefficients .* 1u"eV/Å")...) for d in dB]
+    f = [SVector(austrip.(d' * p.coefficients .* 1u"eV/Å")...) for d in dB]
     return (; e, f)
 end
 
@@ -31,13 +31,13 @@ end
 
 # TODO: analyze MD result and determine if retrain is needed
 function retrain(md_res)
-    return true
+    return length(md_res) == 0
 end
 
 
 # Load input parameters
 args = ["experiment_path",      "active-learning-a-HfO2/",
-        "dataset_path",         "data/",
+        "dataset_path",         "../data/",
         "dataset_filename",     "a-Hfo2-300K-NVT.extxyz",
         "n_train_sys",          "80",
         "n_test_sys",           "20",
@@ -68,9 +68,21 @@ steps = input["steps"]
 Δstep = input["delta_step"]
 curr_steps = 0
 md_res = []
+curr_steps_cp = 0
+md_res_cp = []
+potential = []
 while curr_steps < steps
 
+
     if retrain(md_res)
+        println("Training. Step $(curr_steps).")
+        
+        # Load checkpoint
+        global md_res, curr_steps, md_res_cp, curr_steps_cp
+        md_res = md_res_cp
+        curr_steps = curr_steps_cp
+
+
         # Generate DFT data
         train_sys, e_train, f_train_v, s_train,
         test_sys, e_test, f_test_v, s_train = get_dft_data(input)
@@ -88,33 +100,25 @@ while curr_steps < steps
         wL = input["wL"]
         csp = input["csp"]
         atomic_symbols = unique(atomic_symbol(first(train_sys)))
-        ace_params = ACEParams(atomic_symbols, n_body, max_deg, wL, csp, r0, rcutoff)
+        params = ACEParams(atomic_symbols, n_body, max_deg, wL, csp, r0, rcutoff)
 
 
-        # Calculate descriptors. TODO: Add to PotentialLearning.jl?
-        calc_B(sys) = vcat((evaluate_basis.(sys, [ace_params])'...))
-        calc_dB(sys) =
-            vcat([vcat(d...) for d in evaluate_basis_d.(sys, [ace_params])]...)
-        B_train = calc_B(train_sys)
-        dB_train = calc_dB(train_sys)
-        B_test = calc_B(test_sys)
-        dB_test = calc_dB(test_sys)
+        # Calculate descriptors. TODO: add this to PotentialLearning.jl?
+        calc_B(pars, sys)  = vcat(evaluate_basis.(sys, [pars])'...)
+        calc_dB(pars, sys) = vcat([hcat(evaluate_basis_d(s, pars)...)' for s in sys]...)
+        B_time = @time @elapsed B_train = calc_B(params, train_sys)
+        dB_time = @time @elapsed dB_train = calc_dB(params, train_sys)
+        B_test = calc_B(params, test_sys)
+        dB_test = calc_dB(params, test_sys)
 
 
-        # Calculate A and b. TODO: Add to PotentialLearning.jl?
-        A = [B_train; dB_train]
-        b = [e_train; f_train]
-
-
-        # Calculate coefficients β. TODO: Add to PotentialLearning.jl?
+        # Calculate coefficients β
         w_e, w_f = input["w_e"], input["w_f"]
-        Q = Diagonal([w_e * ones(length(e_train));
-                      w_f * ones(length(f_train))])
-        β = (A'*Q*A) \ (A'*Q*b)
-        
-        
-        # Define ACE
-        ace = ACE(β, ace_params)
+        β = learn(B_train, dB_train, e_train, f_train, w_e, w_f)
+
+
+        # Define interatomic potential: ACE
+        global potential = ACE(β, params)
         
         
         # Calculate predictions
@@ -131,6 +135,12 @@ while curr_steps < steps
         if e_mae > 1.0
             println("Warning: fitting error too high.")
         end
+
+    else
+        # Save checkpoint
+        global md_res, curr_steps, md_res_cp, curr_steps_cp
+        md_res_cp = md_res
+        curr_steps_cp = curr_steps
     end
 
 
@@ -141,21 +151,26 @@ while curr_steps < steps
 
 
     # Run MD simulation
+    println("Running MD. Steps $(curr_steps) to $(curr_steps+Δstep).")
     if curr_steps == 0
-        global curr_steps += Δstep
+        global md_res, curr_steps, potential
+        curr_steps += Δstep
         init_sys = first(test_sys)
         sim = NBSimulator(Δt, curr_steps, thermostat = thermostat)
-        global md_res = simulate(init_sys, sim, ace)
+        md_res = simulate(init_sys, sim, potential)
     else
-        global curr_steps += Δstep
+        global md_res, curr_steps, potential
+        curr_steps += Δstep
         sim = NBSimulator(Δt, curr_steps, t₀=get_time(md_res))
-        global md_res = simulate(get_system(md_res), sim, ace)
+        md_res = simulate(get_system(md_res), sim, potential)
     end
+
 
 end
 
 
 # Post-process and save results
+println("Post-processing...")
 savefig(Atomistic.plot_temperature(md_res, 10), path*"temp.svg")
 savefig(Atomistic.plot_energy(md_res, 10), path*"energy.svg")
 savefig(Atomistic.plot_rdf(md_res, 1.0, Int(0.95 * steps)), path*"rdf.svg")

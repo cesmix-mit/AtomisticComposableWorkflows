@@ -1,6 +1,7 @@
 using AtomsBase
 using InteratomicPotentials 
 using InteratomicBasisPotentials
+using PotentialLearning
 using Atomistic
 using NBodySimulator
 using LinearAlgebra
@@ -8,14 +9,14 @@ using StaticArrays
 using BenchmarkTools
 using Plots
 
-include("load-data.jl")
 
 path = "md-ahfo2-ace-nbs/"
 run(`mkdir -p $path`)
 
+
 # Load system ##################################################################
-systems, energies, forces, stresses = load_data("data/a-Hfo2-300K-NVT.extxyz", 
-                                                 max_entries = 1)
+systems, energies, forces, stresses = load_extxyz("../data/a-Hfo2-300K-NVT.extxyz", 
+                                                   max_entries = 1)
 init_sys = first(systems)
 N = length(init_sys)
 Δt = 1.0u"fs"
@@ -59,7 +60,7 @@ function InteratomicPotentials.energy_and_force(s::AbstractSystem, p::ACE)
     B = evaluate_basis(s, p.basis_params)
     dB = evaluate_basis_d(s, p.basis_params)
     e = austrip.(B' * p.coefficients * 1u"eV")
-    f = [SVector(austrip.(d * p.coefficients .* 1u"eV/Å")...) for d in dB]
+    f = [SVector(austrip.(d' * p.coefficients .* 1u"eV/Å")...) for d in dB]
     return (; e, f)
 end
 
@@ -71,8 +72,8 @@ md_res = @time simulate(init_sys, sim, ace)
 
 
 # Post-process and save results ################################################
-savefig(plot_temperature(md_res, 10), path*"temp.svg")
-savefig(plot_energy(md_res, 10), path*"energy.svg")
-savefig(plot_rdf(md_res, 1.0, Int(0.95 * steps)), path*"rdf.svg")
-animate(md_res, path*"anim.gif")
+savefig(Atomistic.plot_temperature(md_res, 10), path*"temp.svg")
+savefig(Atomistic.plot_energy(md_res, 10), path*"energy.svg")
+savefig(Atomistic.plot_rdf(md_res, 1.0, Int(0.95 * steps)), path*"rdf.svg")
+Atomistic.animate(md_res, path*"anim.gif")
 
