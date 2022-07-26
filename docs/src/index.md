@@ -50,9 +50,10 @@ Atomistic.jl also provides abstractions for using NBodySimulator.jl, however we 
 Examples of use can be found on the websites or github repositories of each tool mentioned.
 
 
-## Example: Fit different DFT datasets using ACE, run multiple serial/parallel fitting experiments, and run an MD simulation.
+## Example
 
-In the folder `ACE`, you will find a basic integrated example that allows you to fit DFT datasets with ACE and run an MD simulation.
+In the folder `ACE`, you will find a basic integrated example that allows you to fit different DFT datasets using ACE, run multiple serial/parallel fitting experiments, and run an MD simulation.
+
 
 ### Chose a DFT dataset
 
