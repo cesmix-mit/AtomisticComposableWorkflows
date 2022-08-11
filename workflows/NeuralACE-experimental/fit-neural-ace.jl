@@ -66,14 +66,14 @@ ibp_params = ACEParams(atomic_symbols, n_body, max_deg, wL, csp, r0, rcutoff)
 
 
 # Calculate descriptors. TODO: add this to InteratomicBasisPotentials.jl?
-calc_B(sys) = evaluate_basis.(sys, [ibp_params])
-calc_dB(sys) = [ dBs_comp for dBs_sys in evaluate_basis_d.(sys, [ibp_params])
-                          for dBs_atom in dBs_sys
-                          for dBs_comp in eachrow(dBs_atom)]
-B_time = @time @elapsed B_train = calc_B(train_sys)
-dB_time = @time @elapsed dB_train = calc_dB(train_sys)
-B_test = calc_B(test_sys)
-dB_test = calc_dB(test_sys)
+calc_B(pars, sys)  = evaluate_basis.(sys, [pars])
+calc_dB(pars, sys) = [ Vector(dBs_comp) for dBs_sys in evaluate_basis_d.(sys, [pars])'
+                                        for dBs_atom in dBs_sys
+                                        for dBs_comp in eachrow(dBs_atom)]
+B_time = @time @elapsed B_train = calc_B(ibp_params, train_sys)
+dB_time = @time @elapsed dB_train = calc_dB(ibp_params, train_sys)
+B_test = calc_B(ibp_params, test_sys)
+dB_test = calc_dB(ibp_params, test_sys)
 B_train_ext = vcat([ fill(B_train[i], 3length(position(s)))
                      for (i,s) in enumerate(train_sys)]...)
 B_test_ext = vcat([ fill(B_test[i], 3length(position(s)))
