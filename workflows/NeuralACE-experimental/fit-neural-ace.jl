@@ -17,8 +17,8 @@ args = ["experiment_path",      "neural-ace-TiO2/",
         "dataset_path",         "../data/",
         "trainingset_filename", "TiO2trainingset.xyz",
         "testset_filename",     "TiO2testset.xyz",
-        "n_train_sys",          "80",
-        "n_test_sys",           "20",
+        "n_train_sys",          "100",
+        "n_test_sys",           "100",
         "n_batches",            "8",
         "n_body",               "3",
         "max_deg",              "3",
@@ -38,9 +38,17 @@ run(`mkdir -p $path`)
 @savecsv path input
 
 
-# Load dataset
+# Load datasets
 train_sys, e_train, f_train_v, s_train,
-test_sys, e_test, f_test_v, s_train = load_dataset(input)
+test_sys, e_test, f_test_v, s_train = load_datasets(input)
+
+
+# Subsample datasets
+n_train_sys = input["n_train_sys"]; n_test_sys = input["n_test_sys"]
+train_sys, train_e, train_f, train_s =
+    random_subsample(train_sys, e_train, f_train_v, s_train, max_sys = n_train_sys)
+test_sys, test_e, test_f, test_s =
+    random_subsample(test_sys, e_test, f_test_v, s_train, max_sys = n_test_sys)
 
 
 # Linearize forces
