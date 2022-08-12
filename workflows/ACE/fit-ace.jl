@@ -10,10 +10,10 @@ args = ["experiment_path",      "ace-TiO2/",
         "dataset_path",         "../data/",
         "trainingset_filename", "TiO2trainingset.xyz",
         "testset_filename",     "TiO2testset.xyz",
-        "n_train_sys",          "80",
-        "n_test_sys",           "20",
-        "n_body",               "3",
-        "max_deg",              "3",
+        "n_train_sys",          "500",
+        "n_test_sys",           "500",
+        "n_body",               "5",
+        "max_deg",              "5",
         "r0",                   "1.0",
         "rcutoff",              "5.0",
         "wL",                   "1.0",
@@ -30,9 +30,17 @@ run(`mkdir -p $path`)
 @savecsv path input
 
 
-# Load dataset
+# Load datasets
 train_sys, e_train, f_train_v, s_train,
-test_sys, e_test, f_test_v, s_train = load_dataset(input)
+test_sys, e_test, f_test_v, s_test = load_datasets(input)
+
+
+# Subsample datasets
+n_train_sys = input["n_train_sys"]; n_test_sys = input["n_test_sys"]
+train_sys, e_train, f_train_v, s_train =
+    random_subsample(train_sys, e_train, f_train_v, s_train, max_sys = n_train_sys)
+test_sys, e_test, f_test_v, s_test =
+    random_subsample(test_sys, e_test, f_test_v, s_test, max_sys = n_test_sys)
 
 
 # Linearize forces
