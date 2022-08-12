@@ -15,8 +15,8 @@ using OptimizationOptimJL
 # Load input parameters
 args = ["experiment_path",      "neural-ace-TiO2/",
         "dataset_path",         "../data/",
-        "trainingset_filename", "TiO2trainingset.xyz",
-        "testset_filename",     "TiO2testset.xyz",
+        "dataset_filename",     "TiO2.xyz",
+        "split_prop",           "0.5", # 50% training, 50% test 
         "n_train_sys",          "100",
         "n_test_sys",           "100",
         "n_batches",            "8",
@@ -40,15 +40,15 @@ run(`mkdir -p $path`)
 
 # Load datasets
 train_sys, e_train, f_train_v, s_train,
-test_sys, e_test, f_test_v, s_train = load_datasets(input)
+test_sys, e_test, f_test_v, s_test = load_datasets(input)
 
 
 # Subsample datasets
 n_train_sys = input["n_train_sys"]; n_test_sys = input["n_test_sys"]
-train_sys, train_e, train_f, train_s =
+train_sys, e_train, f_train_v, s_train =
     random_subsample(train_sys, e_train, f_train_v, s_train, max_sys = n_train_sys)
-test_sys, test_e, test_f, test_s =
-    random_subsample(test_sys, e_test, f_test_v, s_train, max_sys = n_test_sys)
+test_sys, e_test, f_test_v, s_test =
+    random_subsample(test_sys, e_test, f_test_v, s_test, max_sys = n_test_sys)
 
 
 # Linearize forces
