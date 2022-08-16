@@ -13,13 +13,13 @@ using OptimizationOptimJL
 
 
 # Load input parameters
-args = ["experiment_path",      "neural-ace-TiO2/",
+args = ["experiment_path",      "nace-HfB2/", #"nace-aHfO2/", #ace-TiO2/
         "dataset_path",         "../data/",
-        "dataset_filename",     "TiO2.xyz",
-        "split_prop",           "0.5", # 50% training, 50% test 
-        "n_train_sys",          "100",
-        "n_test_sys",           "100",
-        "n_batches",            "8",
+        "dataset_filename",     "HfB2-n24.exyz",#"a-Hfo2-300K-NVT.extxyz", #TiO2.xyz
+        "split_prop",           "0.789", # 80% training, 20% test 
+        "n_train_sys",          "430",
+        "n_test_sys",           "115",
+        "n_batches",            "10",
         "n_body",               "3",
         "max_deg",              "3",
         "r0",                   "1.0",
@@ -109,12 +109,13 @@ train_loader_e, train_loader_f, test_loader_e, test_loader_f =
 
 # Train
 println("Training energies and forces...")
-lib = "Optimization.jl"; epochs = 30; opt = BFGS(); maxiters = 30
+epochs = 1000; opt = ADAM() #epochs = 4; opt = BFGS(); maxiters = 50
 w_e, w_f = input["w_e"], input["w_f"]
-time_fitting =
+time_fitting = time_fitting +
 @time @elapsed train_losses_epochs, test_losses_epochs, train_losses_batches = 
-            train!( lib, nnbp, epochs, opt, maxiters, train_loader_e,
-                    train_loader_f, test_loader_e, test_loader_f, w_e, w_f)
+            train!( train_loader_e, train_loader_f, test_loader_e, test_loader_f,
+                    w_e, w_f, nnbp, epochs, opt)
+
 @savevar path train_losses_batches
 @savevar path train_losses_epochs
 @savevar path test_losses_epochs
