@@ -184,7 +184,6 @@ Alternative: add line to `.shellrc`
 ```
 Restart the terminal
 
-
 ### Clone repository, add registries, and install dependencies
 
 Clone repository iin your work directory
@@ -206,4 +205,3 @@ Activate and instantiate
     pkg> activate .
     pkg> instantiate
 ```
-
