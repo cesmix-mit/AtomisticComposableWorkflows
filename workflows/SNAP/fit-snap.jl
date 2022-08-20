@@ -8,10 +8,10 @@ using LinearAlgebra
 # Load input parameters
 args = ["experiment_path",      "snap-TiO2/",
         "dataset_path",         "../data/",
-        "trainingset_filename", "TiO2trainingset.xyz",
-        "testset_filename",     "TiO2testset.xyz",
-        "n_train_sys",          "80",
-        "n_test_sys",           "20",
+        "dataset_filename",     "TiO2.xyz",
+        "split_prop",           "0.5", # 50% training, 50% test 
+        "n_train_sys",          "200",
+        "n_test_sys",           "200",
         "twojmax",              "4",
         "rcutfac",              "6.0",
         "rmin0",                "0.0",

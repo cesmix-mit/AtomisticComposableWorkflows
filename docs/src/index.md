@@ -31,7 +31,7 @@ This composable approach allowed us to characterize each software component invo
 - [AtomsBase.jl](https://github.com/JuliaMolSim/AtomsBase.jl) is a lightweight abstract interface for representation of atomic geometries. It helps in the operability of diverse atomistic tools. Furthermore, [AtomIO.jl](https://github.com/mfherbst/AtomIO.jl) is a standard IO package for atomic structures integrating with FileIO, AtomsBase, and others.
 - [DFTK.jl](https://docs.dftk.org/stable/), the density-functional toolkit, is a library for playing with plane-wave density-functional theory (DFT) algorithms. In its basic formulation it solves periodic Kohn-Sham equations.
 - [InteratomicPotentials.jl](https://github.com/cesmix-mit/InteratomicPotentials.jl) and [InteratomicBasisPotentials.jl](https://github.com/cesmix-mit/InteratomicBasisPotentials.jl) are responsible for providing the methods to calculate the energies, forces and virial tensors of the potentials that we use in CESMIX.
-- [PotentialLearning.jl](https://github.com/cesmix-mit/PotentialLearning.jl) aims to facilitate the learning/fitting of interatomic potentials and forces, ensuring fast execution, leveraging state-of-the-art tools. The code of this tool will be refactored in the near future.
+- [PotentialLearning.jl](https://github.com/cesmix-mit/PotentialLearning.jl) aims to facilitate active learning of interatomic potentials in atomistic simulations of materials incroporating elements of bayesian inference and machine learning.
 - [Atomistic.jl](https://github.com/cesmix-mit/Atomistic.jl) provides an integrated workflow for MD simulations.
 - [LAMMPS.jl](https://github.com/cesmix-mit/LAMMPS.jl) provides the bindings to the LAMMPS API, allowing other modules to access interatomic potentials, such as SNAP.
 
@@ -184,53 +184,24 @@ Alternative: add line to `.shellrc`
 ```
 Restart the terminal
 
-### Add registries and install dependencies
+### Clone repository, add registries, and install dependencies
 
+Clone repository iin your work directory
+```shell
+    $ git clone https://github.com/cesmix-mit/AtomisticComposableWorkflows.git
+```
 Open a Julia REPL
 ```shell
     $ julia
 ```
-Add registries: General, CESMIX, and MolSim
+Add registries: General, CESMIX, and MolSim. Type `[`, then:
 ```julia
     pkg> registry add https://github.com/JuliaRegistries/General
     pkg> registry add https://github.com/cesmix-mit/CESMIX.git 
     pkg> registry add https://github.com/JuliaMolSim/MolSim.git
 ```
-Activate ans instantiate
+Activate and instantiate
 ```julia
     pkg> activate .
     pkg> instantiate
-```
-
-Install general packages your workflow is likely to require. E.g.
-```julia
-    pkg> add LinearAlgebra
-    pkg> add StaticArrays
-    pkg> add UnitfulAtomic
-    pkg> add Unitful
-    pkg> add Flux
-    pkg> add Optimization
-    pkg> add OptimizationOptimJL
-    pkg> add BenchmarkTools
-    pkg> add Plots
-```
-Install CESMIX packages
-```julia
-    pkg> add AtomsBase
-    pkg> add InteratomicPotentials
-    pkg> add InteratomicBasisPotentials
-    pkg> add https://github.com/cesmix-mit/PotentialLearning.jl
-    pkg> add Atomistic
-```
-Install MD simulator dependencies
-```julia
-    pkg> add Molly
-    pkg> add NBodySimulator
-```
-Install ACE dependencies (see: https://acesuit.github.io/ACE.jl/dev/gettingstarted/#Installation)
-```julia
-    pkg> add PyCall IJulia
-    pkg> add ACE
-    pkg> add JuLIP ASE ACEatoms
-    pkg> add IPFitting
 ```
