@@ -1,11 +1,8 @@
-# This code will be used to enrich InteratomicPotentials.jl, 
-# InteratomicBasisPotentials.jl, and PotentialLearning.jl.
-
 using AtomsBase
 using InteratomicPotentials 
 using InteratomicBasisPotentials
 using PotentialLearning
-using PotentialLearning: NNBasisPotential, potential_energy, force # This will me moved to InteratomicPotentials.jl/InteratomicBasisPotentials.jl
+using PotentialLearning: NNBasisPotential, potential_energy, force # TODO: move to InteratomicBasisPotentials.jl
 using LinearAlgebra
 using Flux
 using Optimization
@@ -13,14 +10,17 @@ using OptimizationOptimJL
 
 
 # Load input parameters
-args = ["experiment_path",      "nace-HfB2/", #"nace-aHfO2/", #ace-TiO2/
+args = ["experiment_path",      "nace-HfB2-new-test/",
         "dataset_path",         "../data/",
-        "dataset_filename",     "HfB2-n24.exyz",#"a-Hfo2-300K-NVT.extxyz", #TiO2.xyz
-        "split_prop",           "0.789", # 80% training, 20% test 
-        "n_train_sys",          "430",
-        "n_test_sys",           "115",
-        "n_batches",            "10",
-        "n_body",               "3",
+        "dataset_filename",     "HfB2-n24-585.exyz",
+        "split_prop",           "0.8", # 80% training, 20% test.
+        "max_train_sys",        "800", # Subsamples up to 800 systems from the training dataset.
+        "max_test_sys",         "200", # Subsamples up to 200 systems from the test dataset.
+        "n_epochs",             "1",
+        "n_batches",            "1",
+        "optimiser",            "BFGS",
+        "max_it",               "50",
+        "n_body",               "2",
         "max_deg",              "3",
         "r0",                   "1.0",
         "rcutoff",              "5.0",
@@ -44,11 +44,11 @@ test_sys, e_test, f_test_v, s_test = load_datasets(input)
 
 
 # Subsample datasets
-n_train_sys = input["n_train_sys"]; n_test_sys = input["n_test_sys"]
+max_train_sys = input["max_train_sys"]; max_test_sys = input["max_test_sys"]
 train_sys, e_train, f_train_v, s_train =
-    random_subsample(train_sys, e_train, f_train_v, s_train, max_sys = n_train_sys)
+    random_subsample(train_sys, e_train, f_train_v, s_train, max_sys = max_train_sys)
 test_sys, e_test, f_test_v, s_test =
-    random_subsample(test_sys, e_test, f_test_v, s_test, max_sys = n_test_sys)
+    random_subsample(test_sys, e_test, f_test_v, s_test, max_sys = max_test_sys)
 
 
 # Linearize forces
@@ -94,7 +94,7 @@ B_test_ext = vcat([ fill(B_test[i], 3length(position(s)))
 
 # Define neural network model
 n_desc = length(first(B_test))
-nn = Chain(Dense(n_desc,8,Flux.relu), Dense(8,1))
+nn = Chain(Dense(n_desc,2,Flux.relu), Dense(2,1))
 nn_params = Flux.params(nn)
 n_params = sum(length, Flux.params(nn))
 nnbp = NNBasisPotential(nn, nn_params, ibp_params)
@@ -109,12 +109,14 @@ train_loader_e, train_loader_f, test_loader_e, test_loader_f =
 
 # Train
 println("Training energies and forces...")
-epochs = 1000; opt = ADAM() #epochs = 4; opt = BFGS(); maxiters = 50
+epochs = input["n_epochs"]
+opt = @eval $(Symbol(input["optimiser"]))()
+max_it = input["max_it"]
 w_e, w_f = input["w_e"], input["w_f"]
-time_fitting = time_fitting +
-@time @elapsed train_losses_epochs, test_losses_epochs, train_losses_batches = 
+time_fitting =
+    @time @elapsed train_losses_epochs, test_losses_epochs, train_losses_batches = 
             train!( train_loader_e, train_loader_f, test_loader_e, test_loader_f,
-                    w_e, w_f, nnbp, epochs, opt)
+                    w_e, w_f, nnbp, epochs, opt, max_it)
 
 @savevar path train_losses_batches
 @savevar path train_losses_epochs
