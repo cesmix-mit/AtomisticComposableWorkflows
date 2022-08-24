@@ -30,7 +30,7 @@ labels = [  "experiment_path",
 
 
 # Parallel execution. Warning: a high number of parallel experiments may degrade system performance.
-parallel = false
+parallel = true
 
 # Experiment folder
 experiments_path = "experiments/"
@@ -41,7 +41,7 @@ juliafile = "fit-neural-ace.jl"
 # Parameter definitions ########################################################
 
 # dataset path
-dataset_path = ["../data/"]
+dataset_path = ["../../data/"]
 
 # dataset filename
 dataset_filename = ["HfB2-n24-585.exyz"]
@@ -63,7 +63,7 @@ n_batches = 1:1
 optimiser = ["BFGS"]
 
 # Max. no. of optimizer iterations
-max_it = 50:50
+max_it = 70:70
 
 # n_body: body order. N: correlation order (N = n_body - 1)
 n_body = 2:2

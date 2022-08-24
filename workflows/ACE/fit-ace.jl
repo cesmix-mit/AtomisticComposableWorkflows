@@ -6,14 +6,14 @@ using LinearAlgebra
 
 
 # Load input parameters
-args = ["experiment_path",      "ace-TiO2/",
+args = ["experiment_path",      "HfB2/",
         "dataset_path",         "../data/",
-        "dataset_filename",     "TiO2.xyz",
-        "split_prop",           "0.5", # 50% training, 50% test 
-        "n_train_sys",          "200",
-        "n_test_sys",           "200",
-        "n_body",               "5",
-        "max_deg",              "5",
+        "dataset_filename",     "HfB2-n24-585.exyz",
+        "split_prop",           "0.8", # 80% training, 20% test.
+        "max_train_sys",        "800", # Subsamples up to 800 systems from the training dataset.
+        "max_test_sys",         "200", # Subsamples up to 200 systems from the test dataset.
+        "n_body",               "2",
+        "max_deg",              "3",
         "r0",                   "1.0",
         "rcutoff",              "5.0",
         "wL",                   "1.0",
@@ -36,11 +36,11 @@ test_sys, e_test, f_test_v, s_test = load_datasets(input)
 
 
 # Subsample datasets
-n_train_sys = input["n_train_sys"]; n_test_sys = input["n_test_sys"]
+max_train_sys = input["max_train_sys"]; max_test_sys = input["max_test_sys"]
 train_sys, e_train, f_train_v, s_train =
-    random_subsample(train_sys, e_train, f_train_v, s_train, max_sys = n_train_sys)
+    random_subsample(train_sys, e_train, f_train_v, s_train, max_sys = max_train_sys)
 test_sys, e_test, f_test_v, s_test =
-    random_subsample(test_sys, e_test, f_test_v, s_test, max_sys = n_test_sys)
+    random_subsample(test_sys, e_test, f_test_v, s_test, max_sys = max_test_sys)
 
 
 # Linearize forces

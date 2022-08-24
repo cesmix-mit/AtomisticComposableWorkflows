@@ -10,8 +10,8 @@ using OptimizationOptimJL
 
 
 # Load input parameters
-args = ["experiment_path",      "nace-HfB2-new-test/",
-        "dataset_path",         "../data/",
+args = ["experiment_path",      "nace-HfB2/",
+        "dataset_path",         "../../data/",
         "dataset_filename",     "HfB2-n24-585.exyz",
         "split_prop",           "0.8", # 80% training, 20% test.
         "max_train_sys",        "800", # Subsamples up to 800 systems from the training dataset.
@@ -19,7 +19,7 @@ args = ["experiment_path",      "nace-HfB2-new-test/",
         "n_epochs",             "1",
         "n_batches",            "1",
         "optimiser",            "BFGS",
-        "max_it",               "50",
+        "max_it",               "70",
         "n_body",               "2",
         "max_deg",              "3",
         "r0",                   "1.0",
