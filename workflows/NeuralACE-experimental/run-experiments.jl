@@ -15,6 +15,7 @@ labels = [  "experiment_path",
             "split_prop",
             "max_train_sys",
             "max_test_sys",
+            "nn",
             "n_epochs",
             "n_batches",
             "optimiser",
@@ -28,9 +29,8 @@ labels = [  "experiment_path",
             "w_e",
             "w_f"]
 
-
 # Parallel execution. Warning: a high number of parallel experiments may degrade system performance.
-parallel = true
+parallel = false
 
 # Experiment folder
 experiments_path = "experiments/"
@@ -44,10 +44,10 @@ juliafile = "fit-neural-ace.jl"
 dataset_path = ["../../../data/"]
 
 # dataset filename
-dataset_filename = [ "HfO2_cpmd_1000.xyz", 
+dataset_filename = [ "HfB2-n24-585.exyz",
+                     "HfO2_cpmd_1000.xyz",
                      "HfO2_cpmd_train_0_94_11_7700.xyz",
-                     "HfO2_relax_1000_989.xyz", 
-                     "HfB2-n24-585.exyz"]
+                     "HfO2_relax_1000_989.xyz" ]
 
 # Split proportoin
 split_prop = 0.8:0.8
@@ -55,6 +55,9 @@ split_prop = 0.8:0.8
 # number of atomic configurations
 max_train_sys = 800:800
 max_test_sys = 200:200
+
+# Neural network model
+nn = ["Chain(Dense(n_desc,2,Flux.relu),Dense(2,1))"]
 
 # No. of epochs
 n_epochs = 1:1
@@ -106,11 +109,9 @@ w_f = 1.0:1.0
 # Run experiments ##############################################################
 
 run(`mkdir -p $experiments_path`)
-
 for params in product(dataset_path, dataset_filename, split_prop, max_train_sys,
-                      max_test_sys, n_epochs, n_batches, optimiser, max_it,
+                      max_test_sys, nn, n_epochs, n_batches, optimiser, max_it,
                       n_body, max_deg, r0, rcutoff, wL, csp, w_e, w_f)
-    
     print("Launching experiment with parameters: ")
     currexp_path = reduce(*,map(s->"$s"*"-", params[2:end]))[1:end-1]
     params = vcat(["$(labels[1])", "$experiments_path$currexp_path/"],

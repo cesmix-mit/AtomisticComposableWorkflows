@@ -11,11 +11,12 @@ using OptimizationOptimJL
 
 # Load input parameters
 args = ["experiment_path",      "nace-HfB2/",
-        "dataset_path",         "../../data/",
+        "dataset_path",         "../../../data/",
         "dataset_filename",     "HfB2-n24-585.exyz",
         "split_prop",           "0.8", # 80% training, 20% test.
         "max_train_sys",        "800", # Subsamples up to 800 systems from the training dataset.
         "max_test_sys",         "200", # Subsamples up to 200 systems from the test dataset.
+        "nn",                   "Chain(Dense(n_desc,2,Flux.relu),Dense(2,1))",
         "n_epochs",             "1",
         "n_batches",            "1",
         "optimiser",            "BFGS",
@@ -94,7 +95,7 @@ B_test_ext = vcat([ fill(B_test[i], 3length(position(s)))
 
 # Define neural network model
 n_desc = length(first(B_test))
-nn = Chain(Dense(n_desc,2,Flux.relu), Dense(2,1))
+nn = eval(Meta.parse(input["nn"])) # e.g. Chain(Dense(n_desc,2,Flux.relu), Dense(2,1))
 nn_params = Flux.params(nn)
 n_params = sum(length, Flux.params(nn))
 nnbp = NNBasisPotential(nn, nn_params, ibp_params)
