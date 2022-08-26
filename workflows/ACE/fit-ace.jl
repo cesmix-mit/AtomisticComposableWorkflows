@@ -6,13 +6,13 @@ using LinearAlgebra
 
 
 # Load input parameters
-args = ["experiment_path",      "HfB2/",
-        "dataset_path",         "../data/",
+args = ["experiment_path",      "HfB2-33/",
+        "dataset_path",         "../../../data/",
         "dataset_filename",     "HfB2-n24-585.exyz",
         "split_prop",           "0.8", # 80% training, 20% test.
         "max_train_sys",        "800", # Subsamples up to 800 systems from the training dataset.
         "max_test_sys",         "200", # Subsamples up to 200 systems from the test dataset.
-        "n_body",               "2",
+        "n_body",               "3",
         "max_deg",              "3",
         "r0",                   "1.0",
         "rcutoff",              "5.0",

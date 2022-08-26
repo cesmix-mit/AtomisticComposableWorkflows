@@ -15,7 +15,7 @@ run(`mkdir -p $path`)
 
 
 # Load system ##################################################################
-systems, energies, forces, stresses = load_extxyz("../../../data/a-Hfo2-300K-NVT.extxyz", 
+systems, energies, forces, stresses = load_extxyz("../../../data/a-Hfo2-300K-NVT-6000.extxyz", 
                                                    max_entries = 1)
 init_sys = first(systems)
 N = length(init_sys)
