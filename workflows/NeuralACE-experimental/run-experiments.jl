@@ -1,7 +1,7 @@
 # Run multiple fitting experiments in serial or parallel.
 #
 # 1. Update parameters ranges in run-experiments.jl
-# 2. Run: $ julia run-experiments.jl
+# 2. Run: $ julia --project=../../ run-experiments.jl
 # 3. After all experiments have been completed, run the following script to gather
 #    the results into a single csv: $ ./gather-results.sh
 #
@@ -41,10 +41,13 @@ juliafile = "fit-neural-ace.jl"
 # Parameter definitions ########################################################
 
 # dataset path
-dataset_path = ["../../data/"]
+dataset_path = ["../../../data/"]
 
 # dataset filename
-dataset_filename = ["HfB2-n24-585.exyz"]
+dataset_filename = [ "HfO2_cpmd_1000.xyz", 
+                     "HfO2_cpmd_train_0_94_11_7700.xyz",
+                     "HfO2_relax_1000_989.xyz", 
+                     "HfB2-n24-585.exyz"]
 
 # Split proportoin
 split_prop = 0.8:0.8
@@ -63,7 +66,7 @@ n_batches = 1:1
 optimiser = ["BFGS"]
 
 # Max. no. of optimizer iterations
-max_it = 70:70
+max_it = 100:100
 
 # n_body: body order. N: correlation order (N = n_body - 1)
 n_body = 2:2

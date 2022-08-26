@@ -6,7 +6,7 @@ using LinearAlgebra
 
 
 # Load input parameters
-args = ["experiment_path",      "HfB2-33/",
+args = ["experiment_path",      "HfB2/",
         "dataset_path",         "../../../data/",
         "dataset_filename",     "HfB2-n24-585.exyz",
         "split_prop",           "0.8", # 80% training, 20% test.

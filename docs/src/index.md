@@ -77,12 +77,12 @@ The input parameters are listed below:
 
 | Input parameter      | Description                                               | E.g.                |
 |----------------------|-----------------------------------------------------------|---------------------|
-| experiment_path      | Experiment path                                           | TiO2/               |
+| experiment_path      | Experiment path                                           | HfB2/               |
 | dataset_path         | Dataset path                                              | data/               |
-| trainingset_filename | Training datasets filename                                | TiO2trainingset.xyz |
-| testset_filename     | Test datasets filename                                    | TiO2testset.xyz     |
-| n_train_sys          | No. of atomic configurations in training dataset          | 80                  |
-| n_test_sys           | No. of atomic configurations in test dataset              | 20                  |
+| dataset_filename     | Dataset filename                                          | HfB2-n24-585.exyz   |
+| split_prop           | Split proportion. E.g. 0.8 training, 0.2 test.            | 0.8                 |
+| max_train_sys        | Max. no. of atomic systems in training dataset            | 800                 |
+| max_test_sys         | No. of atomic systems in test dataset                     | 200                 |
 | n_body               | Body order                                                | 3                   |
 | max_deg              | Maximum polynomial degree                                 | 3                   |
 | r0                   | An estimate on the nearest-neighbour distance for scaling | 1.0                 |
@@ -92,29 +92,30 @@ The input parameters are listed below:
 | w_e                  | Energy weight                                             | 1.0                 |
 | w_f                  | Force weight                                              | 1.0                 |
 
+
 Run fitting process
 
 ```shell
-    $ julia fit-ace.jl  experiment_path         TiO2/ \
-                        dataset_path            data/ \
-                        trainingset_filename    TiO2trainingset.xyz \
-                        testset_filename        TiO2testset.xyz \
-                        n_train_sys             80 \
-                        n_test_sys              20 \
-                        n_body                  3 \
-                        max_deg                 3 \
-                        r0                      1.0 \
-                        rcutoff                 5.0 \
-                        wL                      1.0 \
-                        csp                     1.0 \
-                        w_e                     1.0 \
-                        w_f                     1.0
+    $ julia --project=../../   fit-ace.jl   experiment_path       HfB2/ \
+                                            dataset_path          ../../../data/ \
+                                            dataset_filename      HfB2-n24-585.exyz \
+                                            split_prop            0.8 \
+                                            max_train_sys         800 \
+                                            max_test_sys          200 \
+                                            n_body                3 \
+                                            max_deg               3 \
+                                            r0                    1.0 \
+                                            rcutoff               5.0 \
+                                            wL                    1.0 \
+                                            csp                   1.0 \
+                                            w_e                   1.0 \
+                                            w_f                   1.0
 ```
 
 In addition, you can run the experiments with the default parameters (the parameters shown above).
 
 ```shell
-    $ julia fit-ace.jl
+    $ julia --project=../../ fit-ace.jl
 ```
 
 ### Run multiple fitting experiments in serial/parallel using the wrapper to ACE1.jl in InteratomicBasisPotentials.jl
@@ -134,7 +135,7 @@ Modify the file `run-experiments.jl` to specify the parameter ranges needed to g
 Run the script:
 
 ```shell
-    $ julia run-experiments.jl
+    $ julia --project=../../ run-experiments.jl
 ```
 
 Each experiment is run in a separate process (using `nohup` to facilitate its execution in a cluster).
@@ -148,11 +149,11 @@ After all experiments have been completed, run the following script to gather th
 ### Run an MD simulation using the wrapper to Molly.jl or NBodySimulator.jl in Atomistic.jl
 
 ```shell
-    $ run-md-ahfo2-ace-nbs.jl
+    $ julia --project=../../ run-md-ahfo2-ace-nbs.jl
 ```
 or
 ```shell
-    $ run-md-ahfo2-ace-molly.jl
+    $ julia --project=../../ run-md-ahfo2-ace-molly.jl
 ```
 (Note: currently there is a bug in the second script) 
 
@@ -166,21 +167,21 @@ or
 
 Open terminal and download Julia from https://julialang.org/downloads/
 ```shell
-    $ wget https://julialang-s3.julialang.org/bin/linux/x64/1.7/julia-1.7.3-linux-x86_64.tar.gz
+    $ wget https://julialang-s3.julialang.org/bin/linux/x64/1.8/julia-1.8.0-linux-x86_64.tar.gz
 ```
 Extract file
 ```shell
-    $ tar xvzf julia-1.7.3-linux-x86_64.tar.gz
+    $ tar xvzf julia-1.8.0-linux-x86_64.tar.gz
 ```
 Copy to `/opt` and create link
 ```shell
-    $ sudo mv  ./julia-1.7.3 /opt/
-    $ sudo ln -s /opt/julia-1.7.3/bin/julia /usr/local/bin/julia
+    $ sudo mv  ./julia-1.8.0 /opt/
+    $ sudo ln -s /opt/julia-1.8.0/bin/julia /usr/local/bin/julia
 ```
 Alternative: add line to `.shellrc`
 ```shell
     $ nano .shellrc
-    PATH=$PATH:/home/youruser/julia-1.7.3 /bin/
+    PATH=$PATH:/home/youruser/julia-1.8.0 /bin/
 ```
 Restart the terminal
 
