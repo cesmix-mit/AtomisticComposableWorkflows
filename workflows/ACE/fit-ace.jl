@@ -3,16 +3,17 @@ using InteratomicPotentials
 using InteratomicBasisPotentials
 using PotentialLearning
 using LinearAlgebra
-
+using Random
 
 # Load input parameters
-args = ["experiment_path",      "HfB2/",
+args = ["experiment_path",      "ace-HfO2_cpmd_1000/", #"nace-HfB2/",
         "dataset_path",         "../../../data/",
-        "dataset_filename",     "HfB2-n24-585.exyz",
+        "dataset_filename",     "HfO2_cpmd_1000.xyz", #"HfB2-n24-585.exyz",
+        "random_seed",          "0",   # Random seed to ensure reproducibility of loading and subsampling.
         "split_prop",           "0.8", # 80% training, 20% test.
         "max_train_sys",        "800", # Subsamples up to 800 systems from the training dataset.
         "max_test_sys",         "200", # Subsamples up to 200 systems from the test dataset.
-        "n_body",               "3",
+        "n_body",               "2",
         "max_deg",              "3",
         "r0",                   "1.0",
         "rcutoff",              "5.0",
@@ -29,6 +30,10 @@ path = input["experiment_path"]
 run(`mkdir -p $path`)
 @savecsv path input
 
+# Fix random seed
+if "random_seed" in keys(input)
+    Random.seed!(input["random_seed"])
+end
 
 # Load datasets
 train_sys, e_train, f_train_v, s_train,
@@ -113,4 +118,5 @@ f_test_plot = plot_forces(f_test_pred, f_test)
 
 f_test_cos = plot_cos(f_test_pred, f_test)
 @savefig path f_test_cos
+
 

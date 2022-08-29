@@ -12,6 +12,7 @@ using IterTools
 labels = [  "experiment_path",
             "dataset_path",
             "dataset_filename",
+            "random_seed",
             "split_prop",
             "max_train_sys",
             "max_test_sys",
@@ -40,58 +41,63 @@ dataset_path = ["../../../data/"]
 
 # dataset filename
 dataset_filename = [ "HfB2-n24-585.exyz",
+                     "HfO2_relax_1000_989.xyz",
                      "HfO2_cpmd_1000.xyz",
                      "HfO2_cpmd_train_0_94_11_7700.xyz",
-                     "HfO2_relax_1000_989.xyz" ]
+                     "GaN_md_150K_32atom_2000.extxyz"]
 
-# Split proportoin
-split_prop = 0.8:0.8
+# random_seed: random seed to ensure reproducibility of loading and subsampling.
+#              The length of this vector determines the no. of repetitions of each experiment.
+random_seed = [123, 345]
 
-# number of atomic configurations
-max_train_sys = 800:800
-max_test_sys = 200:200
+# split_prop: split proportion. E.g. 0.8 for training, 0.2 for test.
+split_prop = [0.8]
 
+# max_train_sys, max_test_sys: max. no. of atomic conf. in training and test
+max_train_sys = [800]
+max_test_sys =  [200]
 
 # n_body: body order. N: correlation order (N = n_body - 1)
-n_body = 2:2
+n_body = [3]
 
 # max_deg: maximum polynomial degree
-max_deg = 3:3
+max_deg = [3]
 
 # r0: An estimate on the nearest-neighbour distance for scaling, JuLIP.rnn() 
 #     function returns element specific earest-neighbour distance
-r0 = 1.0:1.0 # ( rnn(:Hf) + rnn(:O) ) / 2.0 ?
+r0 = [1.0] # ( rnn(:Hf) + rnn(:O) ) / 2.0 ?
 
 # rin: inner cutoff radius
 # rin = 0.65*r0 is the default
 
 # rcutoff or rcut: outer cutoff radius
-rcutoff = 5.0:5.0
+rcutoff = [5.0]
 
 # D: specifies the notion of polynomial degree for which there is no canonical
 #    definition in the multivariate setting. Here we use SparsePSHDegree which
 #    specifies a general class of sparse basis sets; see its documentation for
 #    more details. Default: D = ACE1.SparsePSHDegree(; wL = rpi.wL, csp = rpi.csp)
 # wL: ?
-wL = 1.0:1.0
+wL = [1.0]
 # csp: ?
-csp = 1.0:1.0
+csp = [1.0]
 
 # pin: specifies the behaviour of the basis as the inner cutoff radius.
 # pin = 0 is the default.
 
 # w_e: energy weight, used during fitting in normal equations
-w_e = 1.0:1.0
+w_e = [1.0]
 
 # w_f: force weight, used during fitting in normal equations
-w_f = 1.0:1.0
+w_f = [1.0]
 
 
 # Run experiments ##############################################################
 
 run(`mkdir -p $experiments_path`)
-for params in product( dataset_path, dataset_filename, split_prop, max_train_sys,
-                       max_test_sys, n_body, max_deg, r0, rcutoff, wL, csp, w_e, w_f)
+for params in product( dataset_path, dataset_filename, random_seed, split_prop,
+                       max_train_sys, max_test_sys, n_body, max_deg, r0, rcutoff,
+                       wL, csp, w_e, w_f)
     print("Launching experiment with parameters: ")
     currexp_path = reduce(*,map(s->"$s"*"-", params[2:end]))[1:end-1]
     params = vcat(["$(labels[1])", "$experiments_path$currexp_path/"],
